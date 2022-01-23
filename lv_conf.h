@@ -10,6 +10,7 @@
 /*clang-format off*/
 
 #include <stdint.h>
+#include "lv_drv_conf.h"
 
 /*====================
    COLOR SETTINGS
@@ -34,7 +35,7 @@
  *=========================*/
 
 /*1: use custom malloc/free, 0: use the built-in `lv_mem_alloc()` and `lv_mem_free()`*/
-#define LV_MEM_CUSTOM      0
+#define LV_MEM_CUSTOM      1
 #if LV_MEM_CUSTOM == 0
 /*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
 #  define LV_MEM_SIZE    (1024U * 1024U)          /*[bytes]*/
@@ -49,17 +50,17 @@
 #endif     /*LV_MEM_CUSTOM*/
 
 /*Use the standard `memcpy` and `memset` instead of LVGL's own functions. (Might or might not be faster).*/
-#define LV_MEMCPY_MEMSET_STD    0
+#define LV_MEMCPY_MEMSET_STD    1
 
 /*====================
    HAL SETTINGS
  *====================*/
 
 /*Default display refresh period. LVG will redraw changed ares with this period time*/
-#define LV_DISP_DEF_REFR_PERIOD     30      /*[ms]*/
+#define LV_DISP_DEF_REFR_PERIOD     16      /*[ms]*/
 
 /*Input device read period in milliseconds*/
-#define LV_INDEV_DEF_READ_PERIOD    30      /*[ms]*/
+#define LV_INDEV_DEF_READ_PERIOD    16      /*[ms]*/
 
 /*Use a custom tick source that tells the elapsed time in milliseconds.
  *It removes the need to manually update the tick with `lv_tick_inc()`)*/
@@ -97,8 +98,7 @@
  *With complex image decoders (e.g. PNG or JPG) caching can save the continuous open/decode of images.
  *However the opened images might consume additional RAM.
  *0: to disable caching*/
-#define LV_IMG_CACHE_DEF_SIZE       0
-
+#define LV_IMG_CACHE_DEF_SIZE     (4)
 /*Maximum buffer size to allocate for rotation. Only used if software rotation is enabled in the display driver.*/
 #define LV_DISP_ROT_MAX_BUF         (10*1024)
 /*-------------
@@ -126,6 +126,7 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 
 /*Use NXP's VG-Lite GPU iMX RTxxx platforms*/
 #define LV_USE_GPU_NXP_VG_LITE   0
+
 
 /*-------------
  * Logging
@@ -169,8 +170,8 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 #define LV_USE_ASSERT_NULL          1   /*Check if the parameter is NULL. (Very fast, recommended)*/
 #define LV_USE_ASSERT_MALLOC        1   /*Checks is the memory is successfully allocated or no. (Very fast, recommended)*/
 #define LV_USE_ASSERT_STYLE         1   /*Check if the styles are properly initialized. (Very fast, recommended)*/
-#define LV_USE_ASSERT_MEM_INTEGRITY 1   /*Check the integrity of `lv_mem` after critical operations. (Slow)*/
-#define LV_USE_ASSERT_OBJ           1   /*Check the object's type and existence (e.g. not deleted). (Slow)*/
+#define LV_USE_ASSERT_MEM_INTEGRITY 0   /*Check the integrity of `lv_mem` after critical operations. (Slow)*/
+#define LV_USE_ASSERT_OBJ           0   /*Check the object's type and existence (e.g. not deleted). (Slow)*/
 
 /*Add a custom handler when assert happens e.g. to restart the MCU*/
 #define LV_ASSERT_HANDLER_INCLUDE   <stdint.h>
@@ -295,7 +296,7 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 #define LV_FONT_CUSTOM_DECLARE
 
 /*Always set a default font*/
-#define LV_FONT_DEFAULT &lv_font_montserrat_14
+#define LV_FONT_DEFAULT &lv_font_montserrat_18
 
 /*Enable handling large font and/or fonts with a lot of characters.
  *The limit depends on the font size, font face and bpp.
@@ -357,6 +358,15 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 /*Enable Arabic/Persian processing
  *In these languages characters should be replaced with an other form based on their position in the text*/
 #define LV_USE_ARABIC_PERSIAN_CHARS 1
+
+
+/*File system interface*/
+#define LV_USE_FS_IF	1
+#if LV_USE_FS_IF
+#  define LV_FS_IF_FATFS    '\0'
+#  define LV_FS_IF_PC       'c'
+#  define LV_FS_IF_POSIX    '\0'
+#endif  /*LV_USE_FS_IF*/
 
 /*==================
  *  WIDGET USAGE
@@ -468,7 +478,7 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 #if LV_USE_THEME_DEFAULT
 
 /*0: Light mode; 1: Dark mode*/
-# define LV_THEME_DEFAULT_DARK     0
+# define LV_THEME_DEFAULT_DARK     1
 
 /*1: Enable grow on press*/
 # define LV_THEME_DEFAULT_GROW              1
@@ -498,8 +508,14 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 *==================*/
 
 /*Enable the examples to be built with the library*/
-#define LV_BUILD_EXAMPLES   1
+#define LV_BUILD_EXAMPLES   0
 
+
+/*======================
+* PNG
+*=========================*/
+#define LV_PNG_USE_LV_FILESYSTEM 1
+#define LV_USE_PNG 1
 /*--END OF LV_CONF_H--*/
 
 #endif /*LV_CONF_H*/
