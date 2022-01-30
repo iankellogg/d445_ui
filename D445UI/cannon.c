@@ -9,13 +9,10 @@
 #endif
 #include <time.h>
 #include <math.h>
-#include <pthread.h>
-#include "grpc.h"
 
     lv_obj_t * kb;
     lv_obj_t *tabview;
     lv_obj_t * handleImg;
-    pthread_t grpc_thread;
 
 
 
@@ -184,7 +181,7 @@ void sample_event_handler(lv_event_t *e)
         //lv_slider_set_value(slider,angle,LV_ANIM_ON);
         //lv_event_send(slider,LV_EVENT_VALUE_CHANGED,handleImg);
         lv_img_set_angle(handleImg, angle);
-        c_run_Client();
+        //c_run_Client();
     }
 }
 void Create_Circle(lv_obj_t *Parent, int angle, int radius)

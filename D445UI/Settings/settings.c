@@ -136,8 +136,6 @@ lv_obj_t * menu = lv_menu_create(tab);
     create_text(root_page, NULL, "Instrument", 0);
     section = lv_menu_section_create(root_page); 
     lv_obj_t *TestMethod_Page = Create_TestMethod_Menu(section,menu);
-    lv_obj_t *BathSettings_Page = Create_BathSettings_Menu(section,menu);
-    lv_obj_t *NetworkSettings_Page = Create_NetworkSettings_Menu(section,menu);
     
 
 
