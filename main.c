@@ -141,18 +141,17 @@ static void hal_init(void)
   static lv_color_t buf1_2[SDL_HOR_RES * 100];
   lv_disp_draw_buf_init(&disp_buf1, buf1_1, buf1_2, SDL_HOR_RES * 100);
   lv_disp_drv_init(&disp_drv);
-  #endif
-  #if USE_SDL_GPU
-  sdl_gpu_disp_draw_buf_init(&disp_buf1);
-
-  /*Create a display*/
-  sdl_gpu_disp_drv_init(&disp_drv); /*Basic initialization*/
-  #endif
   disp_drv.draw_buf = &disp_buf1;
   disp_drv.flush_cb = sdl_display_flush;
   disp_drv.hor_res = SDL_HOR_RES;
   disp_drv.ver_res = SDL_VER_RES;
   disp_drv.antialiasing = 1;
+  #endif
+  #if USE_SDL_GPU
+
+  /*Create a display*/
+  sdl_disp_drv_init(&disp_drv,SDL_HOR_RES,SDL_VER_RES); /*Basic initialization*/
+  #endif
 
    lv_disp_t * disp = lv_disp_drv_register(&disp_drv);
 

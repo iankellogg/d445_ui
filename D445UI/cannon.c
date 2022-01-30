@@ -144,12 +144,13 @@ static lv_style_t style_title;
 
 
     handleImg = lv_img_create(tab1);
-    lv_img_set_src(handleImg, "c:handle.png");
+    lv_img_set_src(handleImg, "c:/../handle.png");
     lv_obj_align(handleImg, LV_ALIGN_CENTER, 0, 0);
     lv_point_t pivot;
     lv_img_get_pivot(handleImg, &pivot);
-    pivot.y *=1.2;
+    //pivot.y *=1.2;
     lv_img_set_pivot(handleImg, pivot.x, pivot.y);    /*Rotate around the top left corner*/
+    //lv_obj_set_size(handleImg,240,240);
     
     //  slider = lv_slider_create(tab1);
     // lv_obj_set_flex_grow(slider, 1);

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(lvgl)
 
-set(CMAKE_PREFIX_PATH "/home/ian/libgRPC")
+set(CMAKE_PREFIX_PATH "/usr/local")
 
 include(grpc.cmake)
 
@@ -53,5 +53,5 @@ find_package(SDL2 REQUIRED SDL2)
 include_directories(${SDL2_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 add_executable(main main.c  ${SOURCES} ${INCLUDES})
 add_compile_definitions(LV_CONF_INCLUDE_SIMPLE)
-target_link_libraries(main PRIVATE SDL2 m hw_grpc_proto ${_REFLECTION} ${_GRPC_GRPCPP} ${_PROTOBUF_LIBPROTOBUF})
+target_link_libraries(main PRIVATE SDL2 m hw_grpc_proto ${_REFLECTION} ${_GRPC_GRPCPP} ${_PROTOBUF_LIBPROTOBUF} iw)
 add_custom_target (run COMMAND ${EXECUTABLE_OUTPUT_PATH}/main)

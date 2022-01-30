@@ -86,24 +86,25 @@
 
 /* SDL based drivers for display, mouse, mousewheel and keyboard*/
 #ifndef USE_SDL
-# define USE_SDL 1
+# define USE_SDL 0
 #endif
 
 /* Hardware accelerated SDL driver */
 #ifndef USE_SDL_GPU
-# define USE_SDL_GPU 0
+# define USE_SDL_GPU 1
 #endif
 
 #if USE_SDL_GPU
 #define LV_USE_GPU_SDL 1
 #define LV_USE_EXTERNAL_RENDERER 1
+#define LV_USE_DRAW_SDL 1
 #endif
 #if USE_SDL || USE_SDL_GPU
-#  define SDL_HOR_RES     800
-#  define SDL_VER_RES     1280*5/6
+#  define SDL_HOR_RES     1080
+#  define SDL_VER_RES     1920
 
 #if USE_SDL || USE_SDL_GPU
-#  define SDL_FULLSCREEN 0
+#  define SDL_FULLSCREEN 1
 #endif
 
 /* Scale window by this factor (useful when simulating small screens) */

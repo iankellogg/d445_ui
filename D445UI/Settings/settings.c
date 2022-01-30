@@ -2,6 +2,7 @@
 #include <Settings/settings.h>
 #include "Settings/TestMethods.h"
 #include "Settings/BathSettings.h"
+#include "Settings/Network.h"
 
 static lv_obj_t *tab;
 static lv_obj_t * list1;
@@ -136,11 +137,9 @@ lv_obj_t * menu = lv_menu_create(tab);
     section = lv_menu_section_create(root_page); 
     lv_obj_t *TestMethod_Page = Create_TestMethod_Menu(section,menu);
     lv_obj_t *BathSettings_Page = Create_BathSettings_Menu(section,menu);
+    lv_obj_t *NetworkSettings_Page = Create_NetworkSettings_Menu(section,menu);
     
-    cont = create_text(section, LV_SYMBOL_VIDEO, "Display", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_display_page);
-    cont = create_text(section, LV_SYMBOL_WIFI, "Network", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_display_page);
+
 
     create_text(root_page, NULL, "Service", 0);
     section = lv_menu_section_create(root_page);
