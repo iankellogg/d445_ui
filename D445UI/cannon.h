@@ -11,13 +11,19 @@
 #include <libintl.h>
 #include <locale.h>
 #include "lvgl/lvgl.h"
-
+#ifdef __cplusplus
+ #define EXTERNC extern "C"
+ #else
+ #define EXTERNC
+ #endif
 #define _(STRING) gettext(STRING)
 
 
     extern lv_obj_t * kb;
-    void ta_event_cb(lv_event_t * e);
+ EXTERNC   void ta_event_cb(lv_event_t * e);
 
-void create_cannon_application(void);
+EXTERNC void create_cannon_application(void);
+
+#undef EXTERNC
 
 #endif /* CANNON_H_ */

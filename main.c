@@ -79,8 +79,10 @@ int main(int argc, char **argv)
 
   
    // init the file system
+   
+#if LV_USE_FS_IF
    lv_fs_if_init();
-
+#endif
   /*Initialize the HAL (display, input devices, tick) for LVGL*/
   hal_init();
 

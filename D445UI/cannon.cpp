@@ -9,10 +9,20 @@
 #endif
 #include <time.h>
 #include <math.h>
+// OPEN CV INCLUDES
+#include <opencv2/core.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+using namespace cv;
+using namespace std;
 
     lv_obj_t * kb;
     lv_obj_t *tabview;
     lv_obj_t * handleImg;
+VideoCapture cap;
+Mat frame;
+    static lv_img_dsc_t imgDsc;
 
 
 
@@ -54,19 +64,34 @@ void DateTime_Timer(lv_timer_t * timer)
   lv_label_set_text_fmt(DateTime,"%d/%d/%d %d:%02d %s",t->tm_mon+1,t->tm_mday,1900+t->tm_year,hour,t->tm_min,pm);
 
 }
-lv_obj_t * slider;
 
-void slider_event_cb(lv_event_t *e)
+void init_camera()
 {
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    lv_obj_t * img = lv_event_get_user_data(e);
-
-    if (code == LV_EVENT_VALUE_CHANGED)
-    {
-        LV_LOG_USER("Angle: %d",lv_slider_get_value(ta));
-        lv_img_set_angle(img, lv_slider_get_value(ta));
+     int deviceID = 0;             // 0 = open default camera
+    int apiID = cv::CAP_ANY;      // 0 = autodetect default API
+    // open selected camera using selected API
+    cap.open(deviceID, apiID);
+    // check if we succeeded
+    if (!cap.isOpened()) {
+        printf("ERROR! Unable to open camera\n");
+        return;
     }
+    cap.set(CAP_PROP_FRAME_WIDTH,800);
+    cap.set(CAP_PROP_FRAME_HEIGHT,600);
+}
+
+void CamUpdate(lv_timer_t * timer)
+{
+   lv_obj_t *img = (lv_obj_t*)timer->user_data;
+
+        cap.read(frame);
+	cvtColor(frame, frame, COLOR_BGR2BGRA,0);
+    //uint length = frame.total()*frame.channels();
+    uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
+    imgDsc.data = arr;
+    lv_img_set_src(img,&imgDsc);
+   // lv_img_cache_invalidate_src(NULL);
+
 }
 
     static lv_style_t style, style_sel;
@@ -75,6 +100,12 @@ void create_cannon_application(void)
 	 LV_FONT_DECLARE(Orbitron_120);
 //     int iret1 = pthread_create( &grpc_thread, NULL,c_RunServer, NULL);
 
+    init_camera();
+    cap.read(frame);
+    // check if we succeeded
+    if (frame.empty()) {
+       printf("ERROR! blank frame grabbed\n");
+    }
 
      
 
@@ -126,34 +157,22 @@ static lv_style_t style_title;
     //lv_canvas_set_buffer(canvas, cbuf, SDL_HOR_RES,SDL_HOR_RES, LV_IMG_CF_TRUE_COLOR);
     lv_obj_center(canvas);
     //lv_canvas_fill_bg(canvas, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_OPA_TRANSP);
-    lv_png_init();
-    
-    lv_style_init(&style);
-    lv_style_set_radius(&style, 50);
-    lv_style_set_bg_color(&style,lv_palette_main(LV_PALETTE_BLUE));
-    lv_style_init(&style_sel);
-    lv_style_set_radius(&style_sel, 50);
-    lv_style_set_bg_color(&style_sel,lv_palette_main(LV_PALETTE_GREEN));
-    for (int i=0;i<20;i++)
-    {
-        Create_Circle(canvas, 360*i/20, SDL_HOR_RES/2-100-20);
-    }
+    //static Mat colorFrame;
+	cvtColor(frame, frame, COLOR_BGR2BGRA,0);
+    uint length = frame.total()*frame.channels();
+    uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
+    lv_obj_t *img = lv_img_create(canvas);
+    imgDsc.data = arr;
+    imgDsc.data_size = length;
+    imgDsc.header.h = frame.rows;
+    imgDsc.header.w = frame.cols;
+    imgDsc.header.always_zero=0;
+    imgDsc.header.cf = LV_IMG_CF_TRUE_COLOR;
+    lv_img_set_src(img,&imgDsc);
 
+	timer = lv_timer_create(CamUpdate, 60,  img);
+   
 
-    handleImg = lv_img_create(tab1);
-    lv_img_set_src(handleImg, "c:/../handle.png");
-    lv_obj_align(handleImg, LV_ALIGN_CENTER, 0, 0);
-    lv_point_t pivot;
-    lv_img_get_pivot(handleImg, &pivot);
-    //pivot.y *=1.2;
-    lv_img_set_pivot(handleImg, pivot.x, pivot.y);    /*Rotate around the top left corner*/
-    //lv_obj_set_size(handleImg,240,240);
-    
-    //  slider = lv_slider_create(tab1);
-    // lv_obj_set_flex_grow(slider, 1);
-    // lv_slider_set_range(slider, 0, 360);
-    // lv_slider_set_value(slider, 0, LV_ANIM_OFF);
-    // lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, handleImg);
 
 
 
@@ -168,44 +187,11 @@ static lv_style_t style_title;
 
 }
 
-
-void sample_event_handler(lv_event_t *e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t *ta = lv_event_get_target(e);
-    int num = lv_event_get_user_data(e);
-    if (code == LV_EVENT_CLICKED)
-    {
-        int angle = num*360/20;
-        LV_LOG_USER("Button %d %d",num,angle);
-        //lv_slider_set_value(slider,angle,LV_ANIM_ON);
-        //lv_event_send(slider,LV_EVENT_VALUE_CHANGED,handleImg);
-        lv_img_set_angle(handleImg, angle);
-        //c_run_Client();
-    }
-}
-void Create_Circle(lv_obj_t *Parent, int angle, int radius)
-{
-    float offset = -90;
-    int x = radius * cos((angle+offset)*M_PI/180.0) + (SDL_HOR_RES-100)/2;
-    int y = radius * sin((angle+offset)*M_PI/180.0) + (SDL_HOR_RES-100)/2;
-
-    lv_obj_t *btn = lv_btn_create(Parent);
-    //lv_obj_remove_style_all(btn);       
-    lv_obj_add_style(btn, &style, 0);    
-    lv_obj_add_style(btn, &style_sel, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(btn, sample_event_handler, LV_EVENT_ALL, angle*20/360);
-    lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_size(btn,100,100);
-    lv_obj_set_pos(btn,x,y);
-    return btn;
-}
-
 void ta_event_cb(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
-    lv_obj_t * kb = lv_event_get_user_data(e);
+    lv_obj_t * kb = (lv_obj_t*)lv_event_get_user_data(e);
     if(code == LV_EVENT_FOCUSED) {
         if(lv_indev_get_type(lv_indev_get_act()) != LV_INDEV_TYPE_KEYPAD) {
             lv_keyboard_set_textarea(kb, ta);
