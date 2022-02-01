@@ -17,8 +17,9 @@
  #define EXTERNC
  #endif
 #define _(STRING) gettext(STRING)
+#include <pthread.h>
 
-
+extern pthread_mutex_t lvgl_mutex;
     extern lv_obj_t * kb;
  EXTERNC   void ta_event_cb(lv_event_t * e);
 

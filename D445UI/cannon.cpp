@@ -1,4 +1,6 @@
 
+#include <stdlib.h>
+#include <unistd.h>
 #include <cannon.h>
 #include <Settings/settings.h>
 /* Littlevgl specific */
@@ -17,14 +19,27 @@
 using namespace cv;
 using namespace std;
 
+static uint32_t active_camera_mode = 0;
+static int32_t Threshold_Slider=0,Blur_Value=7;
+lv_obj_t * threshold_slider;
+
+ pthread_mutex_t lvgl_mutex;
+
     lv_obj_t * kb;
     lv_obj_t *tabview;
     lv_obj_t * handleImg;
 VideoCapture cap;
-Mat frame;
     static lv_img_dsc_t imgDsc;
+pthread_t CameraThread;
 
 
+void slider_event_cb(lv_event_t * e)
+{
+    lv_obj_t *ta = lv_event_get_target(e);
+    int32_t *val = (int32_t*)lv_event_get_user_data(e);
+    
+    *val = lv_slider_get_value(ta);
+}
 
 void Create_Circle(lv_obj_t *Parent, int angle, int radius);
 //#include "lvgl_helpers.h"
@@ -80,18 +95,80 @@ void init_camera()
     cap.set(CAP_PROP_FRAME_HEIGHT,600);
 }
 
-void CamUpdate(lv_timer_t * timer)
+static void radio_event_handler(lv_event_t * e)
 {
-   lv_obj_t *img = (lv_obj_t*)timer->user_data;
+    uint32_t * active_id = (uint32_t*)lv_event_get_user_data(e);
+    lv_obj_t * cont = lv_event_get_current_target(e);
+    lv_obj_t * act_cb = lv_event_get_target(e);
+    lv_obj_t * old_cb = lv_obj_get_child(cont, *active_id);
+
+    /*Do nothing if the container was clicked*/
+    if(act_cb == cont) return;
+
+    lv_obj_clear_state(old_cb, LV_STATE_CHECKED);   /*Uncheck the previous radio button*/
+    lv_obj_add_state(act_cb, LV_STATE_CHECKED);     /*Uncheck the current radio button*/
+
+    *active_id = lv_obj_get_index(act_cb);
+
+    //LV_LOG_USER("Selected radio buttons: %d, %d", (int)active_index_1, (int)active_index_2);
+}
+
+void *CamUpdate(void *arg)
+{
+   lv_obj_t *img = (lv_obj_t*)arg;
+Mat frame;
+Mat gray;
+Mat outputFrame;
+int i = 1;
+    while (1) 
+    {
 
         cap.read(frame);
-	cvtColor(frame, frame, COLOR_BGR2BGRA,0);
-    //uint length = frame.total()*frame.channels();
-    uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
-    imgDsc.data = arr;
-    lv_img_set_src(img,&imgDsc);
-   // lv_img_cache_invalidate_src(NULL);
+        if (frame.empty())
+        {
+            continue;
+        }
+        cvtColor(frame, gray , COLOR_BGRA2GRAY,0);
+        if (Blur_Value>0 && i==0)
+        {
+            //blur( imgray, imgray, Size(blur_slider,blur_slider) );
+            if (Blur_Value%2==0)
+                Blur_Value++;
+            medianBlur(gray,gray,Blur_Value);
+        }
+        if (Threshold_Slider>0 || i == 1)
+        {
+            i=0;
+            threshold(gray,gray,Threshold_Slider, 255, 0);
+        }
+        else
+        {
+        adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,50*2+1,1);
+        //	Mat element = getStructuringElement(MORPH_RECT , (5,1));
+        int dilation_size=1;
+        Mat element = getStructuringElement( MORPH_RECT ,Size( 2*dilation_size + 1, 2*dilation_size+1 ),Point( dilation_size, dilation_size ) );
+        //				   	  dilate( imgray, imgray, element );
+        morphologyEx(gray,gray, MORPH_CLOSE, element);
+        }
 
+        if (active_camera_mode==1)
+        {
+            cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
+        }
+        else
+        {
+            cvtColor(frame, outputFrame, COLOR_BGR2BGRA,0);
+        }
+
+        //uint length = frame.total()*frame.channels();
+        uchar * arr = outputFrame.isContinuous()? outputFrame.data: outputFrame.clone().data;
+        imgDsc.data = arr;
+    pthread_mutex_lock(&lvgl_mutex);
+        lv_img_set_src(img,&imgDsc);
+    pthread_mutex_unlock(&lvgl_mutex);
+    // lv_img_cache_invalidate_src(NULL);
+      usleep(60 * 1000);
+    }
 }
 
     static lv_style_t style, style_sel;
@@ -99,6 +176,8 @@ void create_cannon_application(void)
 {
 	 LV_FONT_DECLARE(Orbitron_120);
 //     int iret1 = pthread_create( &grpc_thread, NULL,c_RunServer, NULL);
+
+Mat frame;
 
     init_camera();
     cap.read(frame);
@@ -153,11 +232,33 @@ static lv_style_t style_title;
 //static lv_color_t cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(SDL_HOR_RES, SDL_HOR_RES)];
 
     lv_obj_t * canvas = lv_obj_create(tab1);
-    lv_obj_set_size(canvas,SDL_HOR_RES,SDL_HOR_RES);
+    lv_obj_set_size(canvas,lv_pct(100),lv_pct(100));
     //lv_canvas_set_buffer(canvas, cbuf, SDL_HOR_RES,SDL_HOR_RES, LV_IMG_CF_TRUE_COLOR);
     lv_obj_center(canvas);
     //lv_canvas_fill_bg(canvas, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_OPA_TRANSP);
     //static Mat colorFrame;
+
+
+    lv_obj_t * cont2 = lv_obj_create(canvas);
+
+    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_size(cont2, 200, lv_pct(10));
+   //lv_obj_set_x(cont2, lv_pct(50));
+   lv_obj_align(cont2,LV_ALIGN_TOP_RIGHT,0,0);
+    lv_obj_add_event_cb(cont2, radio_event_handler, LV_EVENT_CLICKED, &active_camera_mode);
+    lv_obj_t * chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Raw");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_state(chbox, LV_STATE_CHECKED);
+    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
+    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Warped");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Processed");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+
 	cvtColor(frame, frame, COLOR_BGR2BGRA,0);
     uint length = frame.total()*frame.channels();
     uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
@@ -169,9 +270,58 @@ static lv_style_t style_title;
     imgDsc.header.always_zero=0;
     imgDsc.header.cf = LV_IMG_CF_TRUE_COLOR;
     lv_img_set_src(img,&imgDsc);
+    pthread_create(&CameraThread, NULL, &CamUpdate, img);
 
-	timer = lv_timer_create(CamUpdate, 60,  img);
+    lv_obj_t * rows = lv_obj_create(canvas);
+    lv_obj_set_flex_flow(rows, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_size(rows, lv_pct(100), lv_pct(100));
+   lv_obj_align_to(rows,img,LV_ALIGN_OUT_BOTTOM_LEFT,0,0);
+    
+    /** Button Row **/
+    lv_obj_t * button_row = lv_obj_create(rows);
+    lv_obj_set_flex_flow(button_row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_size(button_row, lv_pct(100), lv_pct(10));
+   //lv_obj_set_x(cont2, lv_pct(50));
+   // button to pause video feed
+   lv_obj_t *PauseButton = lv_btn_create(button_row);
+    //lv_obj_add_event_cb(btn2, event_handler, LV_EVENT_ALL, NULL);
+  //  lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 40);
+    lv_obj_add_flag(PauseButton, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_height(PauseButton, LV_SIZE_CONTENT);
+    label = lv_label_create(PauseButton);
+    lv_label_set_text(label, "Pause");
+    lv_obj_center(label);
+   //button for calibration
+   // while calibration
+   // threshold slider
+     lv_obj_t *row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Threshold");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+       // lv_obj_set_flex_grow(row, 1);
+     threshold_slider = lv_slider_create(row);
+     lv_obj_align(threshold_slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(threshold_slider, 1);
+    lv_slider_set_range(threshold_slider, 0, 255);
+    lv_slider_set_value(threshold_slider, Threshold_Slider, LV_ANIM_OFF);
+    lv_obj_add_event_cb(threshold_slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Threshold_Slider);
+   // blur slider
+
+row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Blur");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        //lv_obj_set_flex_grow(row, 1);
+    lv_obj_t *slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(slider, 1);
+    lv_slider_set_range(slider, 0, 25);
+    lv_slider_set_value(slider, Blur_Value, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Blur_Value);
    
+
 
 
 

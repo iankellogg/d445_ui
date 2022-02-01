@@ -518,6 +518,8 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 #define LV_USE_PNG 0
 /*--END OF LV_CONF_H--*/
 
+#define LV_USE_FFMPEG 1
+
 #endif /*LV_CONF_H*/
 
 #endif /*End of "Content enable"*/
