@@ -21,6 +21,7 @@ using namespace std;
 uint32_t active_camera_mode = 0;
 
 int32_t Threshold_Slider=0,Blur_Value=7;
+bool Flatten = false;
 
 // This puts the thread in calibration mode
 // where we calibrate the lens distoration
@@ -54,6 +55,7 @@ void *CamUpdate(void *arg)
    lv_obj_t *img = (lv_obj_t*)arg;
 Mat frame;
 Mat gray;
+Mat warpped;
 Mat outputFrame;
 int i = 1;
 
@@ -68,13 +70,29 @@ init_camera();
   // Creating vector to store vectors of 2D points for each checkerboard image
   std::vector<std::vector<cv::Point2f> > imgpoints;
    cv::Mat map1, map2;
-    bool calibrated=false;
+   double tran_c[3][3] = {{0.749835891409837, -0.1262034547546523, -38.30423058577465},{-0.0528109950547137, 0.6655462584821944, 49.54305544059942},{-0.0001026683456086287, -0.0005764400797147848, 1}};
+   cv::Mat trans = cv::Mat(3,3,CV_64F,&tran_c);
+    bool calibrated=true;
+    bool flatten=true;
   for(int i{0}; i<CHECKERBOARD[1]; i++)
   {
     for(int j{0}; j<CHECKERBOARD[0]; j++)
       objp.push_back(cv::Point3f(j,i,0));
   }
    int calCount=0;
+   double K_c[3][3] = { {418.5248911727859, 0, 396.5416920228854},{0, 417.3716543944635, 271.7286752066629},{0, 0, 1}};
+   double D_c[4] = { -0.04456047071614869, 0.2307124415380794, -0.7307970854849617, 0.6943486286581442};
+   Mat K=cv::Mat(3, 3, CV_64F, &K_c);
+   Mat D=cv::Mat(4, 1, CV_64F, &D_c);
+     std::cout
+        << "K=" << K << std::endl
+        << "D=" << D << std::endl;
+cv::Size s;
+s.width=800;
+s.height=600;
+cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_16SC2, map1, map2);
+  
+
 
 
     while (1) 
@@ -85,12 +103,11 @@ init_camera();
         {
             continue;
         }
-        cvtColor(frame, gray , COLOR_BGRA2GRAY,0);
 
-        //do the calibration
         if (Calibration == true) 
         {
             
+        cvtColor(frame, gray , COLOR_BGRA2GRAY,0);
             std::vector<Point2f> corner_pts;
             bool success = findChessboardCorners(gray, Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK  | CALIB_CB_NORMALIZE_IMAGE);
             if(success)
@@ -127,7 +144,7 @@ init_camera();
             {         
 
                 cv::TermCriteria criteria(cv::TermCriteria::EPS|cv::TermCriteria::MAX_ITER, 30, 1e-6);
-                cv::Mat K, D;
+                
                 std::vector<cv::Mat> rvecs, tvecs;
                 int flags = cv::fisheye::CALIB_RECOMPUTE_EXTRINSIC|cv::fisheye::CALIB_FIX_SKEW;
                 try {
@@ -147,11 +164,61 @@ init_camera();
                 calCount=0;
 			}
         } else {
+            calCount=0;
             if (calibrated)
-            {
-                
-                 cv::remap(gray, gray, map1, map2, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-            }
+            {    
+                try {
+                 cv::remap(frame, warpped, map1, map2, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+                } catch (Exception e)
+                {
+                    printf("remap fail\r\n");
+                }
+			 }
+            if (flatten && Flatten==false)
+            { 
+                if (calibrated )
+                    warpPerspective(warpped,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+                    else
+                    warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+
+            } 
+            
+        cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+            if (Flatten == true)
+        {
+            std::vector<Point2f> corner_pts;
+            bool success = findChessboardCorners(gray, Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK  | CALIB_CB_NORMALIZE_IMAGE);
+            if(success)
+            {  
+                cv::TermCriteria criteria(cv::TermCriteria::EPS|cv::TermCriteria::MAX_ITER, 30, .001);
+              
+                cornerSubPix(gray,corner_pts,Size(11,11), Size(-1,-1),criteria);
+                vector<Point2f> points;
+                    int corner_pts_size = corner_pts.size();
+                    points.push_back(corner_pts[0]);
+                    points.push_back(corner_pts[(corner_pts_size/4)-1]);
+                    points.push_back(corner_pts[corner_pts_size-1]);
+                    points.push_back(corner_pts[((3*corner_pts_size)/4)]);
+                    // printf("Drawing %d %d %d %d\r\n",0,(corner_pts_size/4)-1,((3*corner_pts_size)/4)-1,corner_pts_size-1);
+                    //points.push_back(corner_pts[0]);
+                    //polylines(frame,points,true,(0,255,255));
+                    // imshow("Corners",frame);
+
+                    vector<Point2f> warpPoints;
+                    int scale=5;
+                    int dist = frame.rows/scale;
+                    int mid_y = frame.cols/2;
+                    int mid_x = frame.rows/2;
+                    warpPoints.push_back(Point(mid_y-dist,mid_x+dist));
+                    warpPoints.push_back(Point(mid_y-dist,mid_x-dist));
+                    warpPoints.push_back(Point(mid_y+dist,mid_x-dist));
+                    warpPoints.push_back(Point(mid_y+dist,mid_x+dist));
+                    trans = getPerspectiveTransform(points,warpPoints);
+                    std::cout << "Trans: " << trans << endl;
+                    flatten=true;
+                     Flatten= false;
+                 }
+        }
 
             if (Blur_Value>0 && i==0)
             {
@@ -175,15 +242,18 @@ init_camera();
             morphologyEx(gray,gray, MORPH_CLOSE, element);
             }
         }
-
-        if (active_camera_mode==1)
-        {
+    switch (active_camera_mode)
+    {
+        case 2:
             cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
-        }
-        else
-        {
+            break;
+        case 1:
+            cvtColor(warpped, outputFrame, COLOR_BGR2BGRA,0);
+            break;
+        case 0:
+        default:
             cvtColor(frame, outputFrame, COLOR_BGR2BGRA,0);
-        }
+    }
 
         //uint length = frame.total()*frame.channels();
         uchar * arr = outputFrame.isContinuous()? outputFrame.data: outputFrame.clone().data;

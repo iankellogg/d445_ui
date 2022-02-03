@@ -16,6 +16,7 @@
 extern uint32_t active_camera_mode;
 extern int32_t Threshold_Slider,Blur_Value;
 extern bool Calibration;
+extern bool Flatten;
 
 EXTERNC void start_camera_thread(lv_obj_t *img);
 

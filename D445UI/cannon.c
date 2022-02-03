@@ -196,6 +196,9 @@ static lv_style_t style_title;
     chbox = lv_checkbox_create(cont2);
     lv_checkbox_set_text(chbox, "Processed");
     lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "AI");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
 
 	// cvtColor(frame, frame, COLOR_BGR2BGRA,0);
     // uint length = frame.total()*frame.channels();
@@ -238,6 +241,14 @@ static lv_style_t style_title;
     lv_label_set_text(label, "Calibrate");
     lv_obj_center(label);
     lv_obj_add_event_cb(CalibrationButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &Calibration);
+
+   lv_obj_t *FlattenButton = lv_btn_create(button_row);
+   lv_obj_add_flag(FlattenButton, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_height(FlattenButton, LV_SIZE_CONTENT);
+    label = lv_label_create(FlattenButton);
+    lv_label_set_text(label, "Flatten");
+    lv_obj_center(label);
+    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &Flatten);
 
 
    //button for calibration
