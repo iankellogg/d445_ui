@@ -17,6 +17,20 @@
 #include "opencv.h"
 static int32_t hPIGPIO = 0;
 
+static int32_t max_duty;
+static const uint32_t white = 4;
+static const uint32_t red    = 17;
+static const uint32_t green  = 22;
+static const uint32_t blue   = 27;
+static const uint32_t freq   = 1000;
+
+typedef struct
+{
+    char *Text;
+    char *ToggledText;
+    int32_t *Value;
+} button_cb_t;
+
 
 static int32_t Brightness = 100;
 
@@ -33,13 +47,36 @@ void slider_event_cb(lv_event_t * e)
     
     *val = lv_slider_get_value(ta);
 }
+void White_CB(lv_event_t * e)
+{
+    lv_obj_t *ta = lv_event_get_target(e);
+    int32_t *val = (int32_t*)lv_event_get_user_data(e);
+    
+    *val = lv_slider_get_value(ta);
+     set_PWM_dutycycle(hPIGPIO,white,(*val)*max_duty/100.0);
+    set_PWM_dutycycle(hPIGPIO,red,0);
+    set_PWM_dutycycle(hPIGPIO,blue,0);
+    set_PWM_dutycycle(hPIGPIO,green,0);
+}
+void colorwheel_cb(lv_event_t * e)
+{
+    lv_obj_t *ta = lv_event_get_target(e);
+    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
+    
+    lv_slider_set_value(val,0,false);
+    lv_color_t color = lv_colorwheel_get_rgb(ta);
+    set_PWM_dutycycle(hPIGPIO,red,color.ch.red*max_duty/255);
+    set_PWM_dutycycle(hPIGPIO,blue,color.ch.blue*max_duty/255);
+    set_PWM_dutycycle(hPIGPIO,green,color.ch.green*max_duty/255);
+    
+}
 
 
 void button_event_cb(lv_event_t * e)
 {
     lv_obj_t *ta = lv_event_get_target(e);
     lv_event_code_t code = lv_event_get_code(e);
-    int32_t *val = (int32_t*)lv_event_get_user_data(e);
+    button_cb_t *val = (button_cb_t*)lv_event_get_user_data(e);
     
     // toggled state
     if (code == LV_EVENT_VALUE_CHANGED)
@@ -47,13 +84,13 @@ void button_event_cb(lv_event_t * e)
             lv_obj_t *label = lv_obj_get_child(ta,0);
         if (lv_obj_get_state(ta)&LV_STATE_CHECKED == LV_STATE_CHECKED)
         {
-            *val = true;
-            lv_label_set_text(label,"Cancel");
+            *val->Value = true;
+            lv_label_set_text(label,val->ToggledText);
         }
         else
         {
-            *val = false;
-            lv_label_set_text(label,"Calibrate");
+            *val->Value = false;
+            lv_label_set_text(label,val->Text);
         }
     }
 }
@@ -125,6 +162,22 @@ void create_cannon_application(void)
 //     int iret1 = pthread_create( &grpc_thread, NULL,c_RunServer, NULL);
 
 
+     hPIGPIO = pigpio_start(NULL, NULL);
+     if (hPIGPIO<0)
+     {
+         printf("Unable to connect to PIGPIOD\r\n");
+     }
+
+
+     set_PWM_frequency(hPIGPIO,white, freq);
+     set_PWM_frequency(hPIGPIO,red, freq);
+     set_PWM_frequency(hPIGPIO,blue, freq);
+     set_PWM_frequency(hPIGPIO,green, freq);
+     max_duty = get_PWM_real_range(hPIGPIO,white);
+     set_PWM_dutycycle(hPIGPIO,white,max_duty);
+    set_PWM_dutycycle(hPIGPIO,red,0);
+    set_PWM_dutycycle(hPIGPIO,blue,0);
+    set_PWM_dutycycle(hPIGPIO,green,0);
 
     kb = lv_keyboard_create(lv_layer_top());
     lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
@@ -240,7 +293,8 @@ static lv_style_t style_title;
     label = lv_label_create(CalibrationButton);
     lv_label_set_text(label, "Calibrate");
     lv_obj_center(label);
-    lv_obj_add_event_cb(CalibrationButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &Calibration);
+    static button_cb_t cal_btn = {.Text = "Calibrate",.ToggledText="Cancel",.Value=&Calibration};
+    lv_obj_add_event_cb(CalibrationButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &cal_btn);
 
    lv_obj_t *FlattenButton = lv_btn_create(button_row);
    lv_obj_add_flag(FlattenButton, LV_OBJ_FLAG_CHECKABLE);
@@ -248,7 +302,8 @@ static lv_style_t style_title;
     label = lv_label_create(FlattenButton);
     lv_label_set_text(label, "Flatten");
     lv_obj_center(label);
-    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &Flatten);
+    static button_cb_t flt_btn = {.Text = "Flatten",.ToggledText="Cancel",.Value=&Flatten};
+    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &flt_btn);
 
 
    //button for calibration
@@ -294,7 +349,7 @@ row = lv_label_create(rows);
     //lv_obj_set_flex_grow(slider, 1);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, Brightness, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Brightness);
+    lv_obj_add_event_cb(slider, White_CB, LV_EVENT_VALUE_CHANGED, &Brightness);
    
 
 row = lv_label_create(rows);
@@ -306,6 +361,7 @@ row = lv_label_create(rows);
     lv_colorwheel_set_mode(cw_rgb,LV_COLORWHEEL_MODE_HUE);
     lv_obj_set_style_arc_width(cw_rgb,25,LV_PART_MAIN);
     lv_obj_center(cw_rgb);
+    lv_obj_add_event_cb(cw_rgb, colorwheel_cb, LV_EVENT_VALUE_CHANGED, slider);
     
 
 
