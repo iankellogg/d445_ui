@@ -23,6 +23,7 @@
 #include "lv_fs_if/lv_fs_if.h"
 #include "cannon.h"
 
+ pthread_mutex_t lvgl_mutex;
 /*********************
  *      DEFINES
  *********************/
@@ -182,8 +183,8 @@ static int tick_thread(void *data) {
     (void)data;
 
     while(1) { 
-        SDL_Delay(5);
-        lv_tick_inc(5); /*Tell LittelvGL that 5 milliseconds were elapsed*/
+        SDL_Delay(1);
+        lv_tick_inc(1);
     }
 
     return 0;

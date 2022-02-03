@@ -31,6 +31,3 @@ add_executable(main main.c  ${SOURCES} ${INCLUDES})
 add_compile_definitions(LV_CONF_INCLUDE_SIMPLE)
 target_link_libraries(main PRIVATE SDL2 m iw ${OpenCV_LIBS} ${FFMPEG_LIBS})
 add_custom_target (run COMMAND ${EXECUTABLE_OUTPUT_PATH}/main)
-
-
-

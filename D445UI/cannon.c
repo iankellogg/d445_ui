@@ -11,26 +11,19 @@
 #endif
 #include <time.h>
 #include <math.h>
-// OPEN CV INCLUDES
-#include <opencv2/core.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+// PIGPIOD
+#include <pigpiod_if2.h>
 
-using namespace cv;
-using namespace std;
+#include "opencv.h"
+static int32_t hPIGPIO = 0;
 
-static uint32_t active_camera_mode = 0;
-static int32_t Threshold_Slider=0,Blur_Value=7;
-lv_obj_t * threshold_slider;
 
- pthread_mutex_t lvgl_mutex;
+static int32_t Brightness = 100;
+
 
     lv_obj_t * kb;
     lv_obj_t *tabview;
     lv_obj_t * handleImg;
-VideoCapture cap;
-    static lv_img_dsc_t imgDsc;
-pthread_t CameraThread;
 
 
 void slider_event_cb(lv_event_t * e)
@@ -40,6 +33,31 @@ void slider_event_cb(lv_event_t * e)
     
     *val = lv_slider_get_value(ta);
 }
+
+
+void button_event_cb(lv_event_t * e)
+{
+    lv_obj_t *ta = lv_event_get_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    int32_t *val = (int32_t*)lv_event_get_user_data(e);
+    
+    // toggled state
+    if (code == LV_EVENT_VALUE_CHANGED)
+    {
+            lv_obj_t *label = lv_obj_get_child(ta,0);
+        if (lv_obj_get_state(ta)&LV_STATE_CHECKED == LV_STATE_CHECKED)
+        {
+            *val = true;
+            lv_label_set_text(label,"Cancel");
+        }
+        else
+        {
+            *val = false;
+            lv_label_set_text(label,"Calibrate");
+        }
+    }
+}
+
 
 void Create_Circle(lv_obj_t *Parent, int angle, int radius);
 //#include "lvgl_helpers.h"
@@ -80,20 +98,6 @@ void DateTime_Timer(lv_timer_t * timer)
 
 }
 
-void init_camera()
-{
-     int deviceID = 0;             // 0 = open default camera
-    int apiID = cv::CAP_ANY;      // 0 = autodetect default API
-    // open selected camera using selected API
-    cap.open(deviceID, apiID);
-    // check if we succeeded
-    if (!cap.isOpened()) {
-        printf("ERROR! Unable to open camera\n");
-        return;
-    }
-    cap.set(CAP_PROP_FRAME_WIDTH,800);
-    cap.set(CAP_PROP_FRAME_HEIGHT,600);
-}
 
 static void radio_event_handler(lv_event_t * e)
 {
@@ -113,63 +117,6 @@ static void radio_event_handler(lv_event_t * e)
     //LV_LOG_USER("Selected radio buttons: %d, %d", (int)active_index_1, (int)active_index_2);
 }
 
-void *CamUpdate(void *arg)
-{
-   lv_obj_t *img = (lv_obj_t*)arg;
-Mat frame;
-Mat gray;
-Mat outputFrame;
-int i = 1;
-    while (1) 
-    {
-
-        cap.read(frame);
-        if (frame.empty())
-        {
-            continue;
-        }
-        cvtColor(frame, gray , COLOR_BGRA2GRAY,0);
-        if (Blur_Value>0 && i==0)
-        {
-            //blur( imgray, imgray, Size(blur_slider,blur_slider) );
-            if (Blur_Value%2==0)
-                Blur_Value++;
-            medianBlur(gray,gray,Blur_Value);
-        }
-        if (Threshold_Slider>0 || i == 1)
-        {
-            i=0;
-            threshold(gray,gray,Threshold_Slider, 255, 0);
-        }
-        else
-        {
-        adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,50*2+1,1);
-        //	Mat element = getStructuringElement(MORPH_RECT , (5,1));
-        int dilation_size=1;
-        Mat element = getStructuringElement( MORPH_RECT ,Size( 2*dilation_size + 1, 2*dilation_size+1 ),Point( dilation_size, dilation_size ) );
-        //				   	  dilate( imgray, imgray, element );
-        morphologyEx(gray,gray, MORPH_CLOSE, element);
-        }
-
-        if (active_camera_mode==1)
-        {
-            cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
-        }
-        else
-        {
-            cvtColor(frame, outputFrame, COLOR_BGR2BGRA,0);
-        }
-
-        //uint length = frame.total()*frame.channels();
-        uchar * arr = outputFrame.isContinuous()? outputFrame.data: outputFrame.clone().data;
-        imgDsc.data = arr;
-    pthread_mutex_lock(&lvgl_mutex);
-        lv_img_set_src(img,&imgDsc);
-    pthread_mutex_unlock(&lvgl_mutex);
-    // lv_img_cache_invalidate_src(NULL);
-      usleep(60 * 1000);
-    }
-}
 
     static lv_style_t style, style_sel;
 void create_cannon_application(void)
@@ -177,16 +124,7 @@ void create_cannon_application(void)
 	 LV_FONT_DECLARE(Orbitron_120);
 //     int iret1 = pthread_create( &grpc_thread, NULL,c_RunServer, NULL);
 
-Mat frame;
 
-    init_camera();
-    cap.read(frame);
-    // check if we succeeded
-    if (frame.empty()) {
-       printf("ERROR! blank frame grabbed\n");
-    }
-
-     
 
     kb = lv_keyboard_create(lv_layer_top());
     lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
@@ -231,15 +169,15 @@ static lv_style_t style_title;
 
 //static lv_color_t cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(SDL_HOR_RES, SDL_HOR_RES)];
 
-    lv_obj_t * canvas = lv_obj_create(tab1);
-    lv_obj_set_size(canvas,lv_pct(100),lv_pct(100));
-    //lv_canvas_set_buffer(canvas, cbuf, SDL_HOR_RES,SDL_HOR_RES, LV_IMG_CF_TRUE_COLOR);
-    lv_obj_center(canvas);
+    // lv_obj_t * canvas = lv_obj_create(tab1);
+    // lv_obj_set_size(canvas,lv_pct(100),lv_pct(100));
+    // //lv_canvas_set_buffer(canvas, cbuf, SDL_HOR_RES,SDL_HOR_RES, LV_IMG_CF_TRUE_COLOR);
+    // lv_obj_center(canvas);
     //lv_canvas_fill_bg(canvas, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_OPA_TRANSP);
     //static Mat colorFrame;
 
 
-    lv_obj_t * cont2 = lv_obj_create(canvas);
+    lv_obj_t * cont2 = lv_obj_create(tab1);
 
     lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_size(cont2, 200, lv_pct(10));
@@ -259,20 +197,23 @@ static lv_style_t style_title;
     lv_checkbox_set_text(chbox, "Processed");
     lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-	cvtColor(frame, frame, COLOR_BGR2BGRA,0);
-    uint length = frame.total()*frame.channels();
-    uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
-    lv_obj_t *img = lv_img_create(canvas);
-    imgDsc.data = arr;
-    imgDsc.data_size = length;
-    imgDsc.header.h = frame.rows;
-    imgDsc.header.w = frame.cols;
+	// cvtColor(frame, frame, COLOR_BGR2BGRA,0);
+    // uint length = frame.total()*frame.channels();
+    // uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
+     lv_obj_t *img = lv_img_create(tab1);
+   static  lv_img_dsc_t imgDsc;
+    static const uint8_t emptyFrame[800*600*4];
+    imgDsc.data = emptyFrame;
+    imgDsc.data_size = 0;
+    imgDsc.header.h = 600;
+    imgDsc.header.w = 800;
     imgDsc.header.always_zero=0;
     imgDsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-    lv_img_set_src(img,&imgDsc);
-    pthread_create(&CameraThread, NULL, &CamUpdate, img);
+     lv_img_set_src(img,&imgDsc);
 
-    lv_obj_t * rows = lv_obj_create(canvas);
+    start_camera_thread(img);
+
+    lv_obj_t * rows = lv_obj_create(tab1);
     lv_obj_set_flex_flow(rows, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_size(rows, lv_pct(100), lv_pct(100));
    lv_obj_align_to(rows,img,LV_ALIGN_OUT_BOTTOM_LEFT,0,0);
@@ -284,13 +225,21 @@ static lv_style_t style_title;
    //lv_obj_set_x(cont2, lv_pct(50));
    // button to pause video feed
    lv_obj_t *PauseButton = lv_btn_create(button_row);
-    //lv_obj_add_event_cb(btn2, event_handler, LV_EVENT_ALL, NULL);
-  //  lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 40);
     lv_obj_add_flag(PauseButton, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_height(PauseButton, LV_SIZE_CONTENT);
     label = lv_label_create(PauseButton);
     lv_label_set_text(label, "Pause");
     lv_obj_center(label);
+
+   lv_obj_t *CalibrationButton = lv_btn_create(button_row);
+   lv_obj_add_flag(CalibrationButton, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_height(CalibrationButton, LV_SIZE_CONTENT);
+    label = lv_label_create(CalibrationButton);
+    lv_label_set_text(label, "Calibrate");
+    lv_obj_center(label);
+    lv_obj_add_event_cb(CalibrationButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &Calibration);
+
+
    //button for calibration
    // while calibration
    // threshold slider
@@ -300,13 +249,14 @@ static lv_style_t style_title;
         lv_label_set_text(row, "Threshold");
         lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
        // lv_obj_set_flex_grow(row, 1);
-     threshold_slider = lv_slider_create(row);
-     lv_obj_align(threshold_slider,LV_ALIGN_TOP_RIGHT,0,25);
+     lv_obj_t *slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
     //lv_obj_set_flex_grow(threshold_slider, 1);
-    lv_slider_set_range(threshold_slider, 0, 255);
-    lv_slider_set_value(threshold_slider, Threshold_Slider, LV_ANIM_OFF);
-    lv_obj_add_event_cb(threshold_slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Threshold_Slider);
+    lv_slider_set_range(slider, 0, 255);
+    lv_slider_set_value(slider, Threshold_Slider, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Threshold_Slider);
    // blur slider
+
 
 row = lv_label_create(rows);
      lv_obj_set_height(row,50);
@@ -314,7 +264,7 @@ row = lv_label_create(rows);
         lv_label_set_text(row, "Blur");
         lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
         //lv_obj_set_flex_grow(row, 1);
-    lv_obj_t *slider = lv_slider_create(row);
+    slider = lv_slider_create(row);
      lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
     //lv_obj_set_flex_grow(slider, 1);
     lv_slider_set_range(slider, 0, 25);
@@ -322,7 +272,30 @@ row = lv_label_create(rows);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Blur_Value);
    
 
+row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Stage Brightness");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        //lv_obj_set_flex_grow(row, 1);
+    slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(slider, 1);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, Brightness, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Brightness);
+   
 
+row = lv_label_create(rows);
+     lv_obj_set_height(row,250);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Stage color");
+    lv_obj_t *cw_rgb = lv_colorwheel_create(row, true);
+    lv_obj_set_size(cw_rgb, 200, 200);
+    lv_colorwheel_set_mode(cw_rgb,LV_COLORWHEEL_MODE_HUE);
+    lv_obj_set_style_arc_width(cw_rgb,25,LV_PART_MAIN);
+    lv_obj_center(cw_rgb);
+    
 
 
 

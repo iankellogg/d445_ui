@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "mutex": "cpp"
+        "mutex": "cpp",
+        "lv_btn.h": "c"
     }
 }
