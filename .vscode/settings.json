@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "mutex": "cpp",
-        "lv_btn.h": "c"
+        "lv_btn.h": "c",
+        "chrono": "cpp",
+        "algorithm": "cpp"
     }
 }

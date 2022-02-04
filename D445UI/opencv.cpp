@@ -19,17 +19,21 @@ using namespace std;
 // 1 = Computer Vision Input
 // 2 = Computer Vision recreation
 uint32_t active_camera_mode = 0;
-
+int32_t polyfit = 2;
 int32_t Threshold_Slider=0,Blur_Value=7;
-bool Flatten = false;
+bool Flatten = false,ContourCalibrate=false,Pause=false;
 
 // This puts the thread in calibration mode
 // where we calibrate the lens distoration
 bool Calibration = false;
 static const int CHECKERBOARD[2] = {4,4};
 
-
+Point2f cursorPos = Point2f(1000,1000);
 pthread_t CameraThread;
+
+// the handle we want to find
+vector<Point> ShapeToFind = {Point2i(487,162),Point2i(262,356),Point2i(532,418),Point2i(471,296)};
+
 
 VideoCapture cap;
 
@@ -50,14 +54,26 @@ void init_camera()
 }
 
 
+void draw_tray(Mat &canvas, int numSamples, int radius, Point &knob, double startAngle)
+{
+    Point center;
+    for (int i=0;i<numSamples;i++)
+    {
+        center.x = radius*cos((startAngle+i*(360.0/(float)numSamples))*M_PI/180.0) + knob.x;
+        center.y = radius*sin((startAngle+i*(360.0/(float)numSamples))*M_PI/180.0) + knob.y;
+         cv::circle	(canvas, center, 40, Scalar(200,0,0),-1,LINE_8,0);
+    }
+}
+
 void *CamUpdate(void *arg)
 {
    lv_obj_t *img = (lv_obj_t*)arg;
 Mat frame;
 Mat gray;
-Mat warpped;
+Mat warpped; 
+Mat drawing;
 Mat outputFrame;
-int i = 1;
+int count = 1;
 
 init_camera();
 
@@ -70,7 +86,8 @@ init_camera();
   // Creating vector to store vectors of 2D points for each checkerboard image
   std::vector<std::vector<cv::Point2f> > imgpoints;
    cv::Mat map1, map2;
-   double tran_c[3][3] = {{0.749835891409837, -0.1262034547546523, -38.30423058577465},{-0.0528109950547137, 0.6655462584821944, 49.54305544059942},{-0.0001026683456086287, -0.0005764400797147848, 1}};
+   double tran_c[3][3] = {{0.9887319429809974, 0.05716665516063728, -117.719050132904},{ -0.07706136048259898, 0.9687507839912129, 47.90186573630533},{ 1.14939671416363e-05, -7.609421690938215e-05, 1}};
+
    cv::Mat trans = cv::Mat(3,3,CV_64F,&tran_c);
     bool calibrated=true;
     bool flatten=true;
@@ -92,16 +109,19 @@ s.width=800;
 s.height=600;
 cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_16SC2, map1, map2);
   
+           drawing = Mat::zeros( s, CV_8UC3 );
 
 
 
     while (1) 
     {
-
-        cap.read(frame);
-        if (frame.empty())
+        if (!Pause)
         {
-            continue;
+            cap.read(frame);
+            if (frame.empty())
+            {
+                continue;
+            }
         }
 
         if (Calibration == true) 
@@ -209,10 +229,10 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
                     int dist = frame.rows/scale;
                     int mid_y = frame.cols/2;
                     int mid_x = frame.rows/2;
-                    warpPoints.push_back(Point(mid_y-dist,mid_x+dist));
                     warpPoints.push_back(Point(mid_y-dist,mid_x-dist));
                     warpPoints.push_back(Point(mid_y+dist,mid_x-dist));
                     warpPoints.push_back(Point(mid_y+dist,mid_x+dist));
+                    warpPoints.push_back(Point(mid_y-dist,mid_x+dist));
                     trans = getPerspectiveTransform(points,warpPoints);
                     std::cout << "Trans: " << trans << endl;
                     flatten=true;
@@ -220,16 +240,16 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
                  }
         }
 
-            if (Blur_Value>0 && i==0)
+            if (Blur_Value>0 && count==0)
             {
                 //blur( imgray, imgray, Size(blur_slider,blur_slider) );
                 if (Blur_Value%2==0)
                     Blur_Value++;
                 medianBlur(gray,gray,Blur_Value);
             }
-            if (Threshold_Slider>0 || i == 1)
+            if (Threshold_Slider>0 || count == 1)
             {
-                i=0;
+                count=0;
                 threshold(gray,gray,Threshold_Slider, 255, 0);
             }
             else
@@ -241,9 +261,93 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
             //				   	  dilate( imgray, imgray, element );
             morphologyEx(gray,gray, MORPH_CLOSE, element);
             }
+
+			   vector<vector<Point> > contours;
+		   vector<Vec4i> hierarchy;
+		   findContours( gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );
+           drawing = Mat::zeros( gray.size(), CV_8UC3 );
+           double closestMatch = DBL_MAX;
+           int found=-1;
+		   for( size_t i = 0; i< contours.size(); i++ )
+           {
+               
+               Scalar color = Scalar( 133, 133, 133 );
+			   approxPolyDP	(contours[i],contours[i],((double)polyfit/50.0) * arcLength(contours[i], true),true);
+               if (ContourCalibrate )
+               {
+                  double testMatch = cv::pointPolygonTest	(	contours[i],cursorPos,true );
+                  if (testMatch>=0 && testMatch<closestMatch)
+                  {
+                      closestMatch = testMatch;
+                      found = i;
+                  }
+			    drawContours( drawing, contours, i, color, 2, LINE_8, hierarchy, 0 );
+               }
+               else if (ShapeToFind.size() > 1)
+               {
+                   // start trying to find the contour
+                    double ret = matchShapes(contours[i],ShapeToFind,CONTOURS_MATCH_I1,0.0);
+                    if (ret<0.05)
+                    {     
+                         Point knob_center;
+                        cv::Moments m = cv::moments(contours[i], true);
+                        double cen_x=m.m10/m.m00;
+                        double cen_y=m.m01/m.m00;
+				        knob_center = Point(cen_x,cen_y);
+
+			// this finds the point closest to the center of the contour
+					// because the shape of the knob has a point near the center, it must be pointing that way
+				  double minDistance=DBL_MAX;
+				  int minDistancePoint=0;
+				  for (int j=0; j<contours[i].size();j++)
+				  {
+						Point p = contours[i][j];
+						double res = norm(p-knob_center);
+						if (res<minDistance)
+						{
+							minDistance = res;
+							minDistancePoint = j;
+						}
+				  }
+				  double theta = 180-(atan2(contours[i][minDistancePoint].y-knob_center.y,contours[i][minDistancePoint].x-knob_center.x)*180.0/3.14159);
+
+
+				//  avgAngle = theta;// 0.9*avgAngle + 0.1*theta;
+				 // printf("%f\r\n",avgAngle);
+				  char angleText[15];
+				  //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
+				  sprintf(angleText,"%f",theta);
+				  putText(drawing, angleText, Point(50,frame.rows-50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
+				        fillPoly(drawing,contours[i],Scalar(0,0,255));
+			        line(drawing,knob_center,contours[i][minDistancePoint],Scalar(0,255,0));
+                    
+                     draw_tray(drawing, 20, 300, knob_center,theta);
+                    break;
+                    }
+               }
+            }
+            if (found>=0 && ContourCalibrate)
+            {
+			   drawContours( drawing, contours, found, Scalar( 33, 200, 33 ), 2, LINE_8, hierarchy, 0 );
+               
+                ShapeToFind.clear();
+                for (int i=0; i<contours[found].size();i++)
+                {
+                    ShapeToFind.push_back(contours[found][i]);
+                }
+               cout << "Shape: " << ShapeToFind << endl;
+            }
+
+
+
+
+
         }
     switch (active_camera_mode)
     {
+        case 3:
+            cvtColor(drawing,outputFrame,COLOR_BGR2BGRA,0);
+            break;
         case 2:
             cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
             break;
@@ -273,6 +377,11 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
 
 
 
+void Send_Contour_Cursor_Pos(int x, int y)
+{
+    cursorPos.x = x;
+    cursorPos.y = y;
+}
 
 void start_camera_thread(lv_obj_t *img)
 {

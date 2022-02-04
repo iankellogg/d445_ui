@@ -10,6 +10,7 @@
 #include "lvgl/lvgl.h"
 #endif
 #include <time.h>
+#include <stdio.h>
 #include <math.h>
 // PIGPIOD
 #include <pigpiod_if2.h>
@@ -58,6 +59,54 @@ void White_CB(lv_event_t * e)
     set_PWM_dutycycle(hPIGPIO,blue,0);
     set_PWM_dutycycle(hPIGPIO,green,0);
 }
+void Cam_Click_CB(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_point_t p;
+    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
+//        uint16_t btn_pr = LV_BTNMATRIX_BTN_NONE;
+    /*Search the pressed area*/
+    if (code == LV_EVENT_RELEASED)
+    {
+        lv_indev_t *indev = lv_indev_get_act();
+        lv_indev_type_t indev_type = lv_indev_get_type(indev);
+        if (indev_type == LV_INDEV_TYPE_ENCODER || indev_type == LV_INDEV_TYPE_KEYPAD) return LV_RES_OK;
+
+        lv_indev_get_point(indev, &p);
+        p.x = p.x-val->coords.x1;
+        p.y=p.y-val->coords.y1;
+        printf("Clicked on image: x: %d y: %d\r\n",p.x,p.y);
+        Send_Contour_Cursor_Pos(p.x,p.y);
+    }
+}
+
+void ContourBtn_CB(lv_event_t * e)
+{
+
+    lv_obj_t *ta = lv_event_get_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
+    
+    // toggled state
+    if (code == LV_EVENT_VALUE_CHANGED)
+    {
+            lv_obj_t *label = lv_obj_get_child(ta,0);
+        if (lv_obj_get_state(ta)&LV_STATE_CHECKED == LV_STATE_CHECKED)
+        {
+            ContourCalibrate = true;   
+            lv_obj_add_event_cb(val, Cam_Click_CB, LV_EVENT_ALL, val);
+            lv_label_set_text(label,"Cancel"); 
+        }
+        else
+        {
+            ContourCalibrate = false;
+            lv_obj_remove_event_cb(val, Cam_Click_CB);
+            lv_label_set_text(label,"Contour");
+        }
+    }
+
+}
+
 void colorwheel_cb(lv_event_t * e)
 {
     lv_obj_t *ta = lv_event_get_target(e);
@@ -256,7 +305,9 @@ static lv_style_t style_title;
 	// cvtColor(frame, frame, COLOR_BGR2BGRA,0);
     // uint length = frame.total()*frame.channels();
     // uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
-     lv_obj_t *img = lv_img_create(tab1);
+    lv_obj_t *img_btn = lv_btn_create(tab1);
+    lv_obj_remove_style_all(img_btn);
+     lv_obj_t *img = lv_img_create(img_btn);
    static  lv_img_dsc_t imgDsc;
     static const uint8_t emptyFrame[800*600*4];
     imgDsc.data = emptyFrame;
@@ -285,6 +336,8 @@ static lv_style_t style_title;
     lv_obj_set_height(PauseButton, LV_SIZE_CONTENT);
     label = lv_label_create(PauseButton);
     lv_label_set_text(label, "Pause");
+    static button_cb_t pause_btn = {.Text = "Pause",.ToggledText="Cancel",.Value=&Pause};
+    lv_obj_add_event_cb(PauseButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &pause_btn);
     lv_obj_center(label);
 
    lv_obj_t *CalibrationButton = lv_btn_create(button_row);
@@ -304,6 +357,16 @@ static lv_style_t style_title;
     lv_obj_center(label);
     static button_cb_t flt_btn = {.Text = "Flatten",.ToggledText="Cancel",.Value=&Flatten};
     lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &flt_btn);
+
+
+   lv_obj_t *ContourButton = lv_btn_create(button_row);
+   lv_obj_add_flag(ContourButton, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_height(ContourButton, LV_SIZE_CONTENT);
+    label = lv_label_create(ContourButton);
+    lv_label_set_text(label, "Contour");
+    lv_obj_center(label);
+    //static button_cb_t contour_btn = {.Text = "Contour",.ToggledText="Cancel",.Value=&ContourCalibrate};
+    lv_obj_add_event_cb(ContourButton, ContourBtn_CB, LV_EVENT_VALUE_CHANGED, img_btn);
 
 
    //button for calibration
@@ -336,6 +399,20 @@ row = lv_label_create(rows);
     lv_slider_set_range(slider, 0, 25);
     lv_slider_set_value(slider, Blur_Value, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Blur_Value);
+
+    
+row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Poly Fit");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        //lv_obj_set_flex_grow(row, 1);
+    slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(slider, 1);
+    lv_slider_set_range(slider, 0, 10);
+    lv_slider_set_value(slider, polyfit, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &polyfit);
    
 
 row = lv_label_create(rows);
