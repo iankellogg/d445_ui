@@ -4,6 +4,7 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/objdetect.hpp>
 
 #include "opencv.h"
 #include <stdlib.h>
@@ -19,9 +20,16 @@ using namespace std;
 // 1 = Computer Vision Input
 // 2 = Computer Vision recreation
 uint32_t active_camera_mode = 0;
-int32_t polyfit = 2;
-int32_t Threshold_Slider=0,Blur_Value=7;
+int32_t polyfit = 30;
+int32_t Threshold_Slider=1,Blur_Value=0,Threshold_size=50,contourFilter=10,dilation_size=1;
 bool Flatten = false,ContourCalibrate=false,Pause=false;
+bool foundQRcode=true;
+int matchValue = 50;
+
+// if 0, no tray present
+// sets to 10 when present, counts down for each frame it is missing, but resets to 10 when found
+static const int TrayPresentResetVal = 10;
+int TrayPresentCounter=0;
 
 // This puts the thread in calibration mode
 // where we calibrate the lens distoration
@@ -30,12 +38,42 @@ static const int CHECKERBOARD[2] = {4,4};
 
 Point2f cursorPos = Point2f(1000,1000);
 pthread_t CameraThread;
+    QRCodeDetector qrDecoder;
 
 // the handle we want to find
 vector<Point> ShapeToFind = {Point2i(487,162),Point2i(262,356),Point2i(532,418),Point2i(471,296)};
 
 
 VideoCapture cap;
+
+Scalar colorFilter_min = Scalar(0,10,140), colorFilter_max = Scalar(180,255,255);
+
+void SetColorFilter(bool max, int h, int s, int v)
+{
+    if (max)
+    {
+        colorFilter_max = Scalar(h,s,v);
+    }
+    else
+    {
+        colorFilter_min = Scalar(h,s,v);
+    }
+}
+void GetColorFilter(bool max, int *h, int *s, int *v)
+{
+    if (max)
+    {
+        *h  = colorFilter_max.val[0];
+        *s  = colorFilter_max.val[1];
+        *v  = colorFilter_max.val[2];
+    }
+    else
+    {
+        *h  = colorFilter_min.val[0];
+        *s  = colorFilter_min.val[1];
+        *v  = colorFilter_min.val[2];
+    }
+}
 
 
 void init_camera()
@@ -71,6 +109,7 @@ void *CamUpdate(void *arg)
 Mat frame;
 Mat gray;
 Mat warpped; 
+Mat input;
 Mat drawing;
 Mat outputFrame;
 int count = 1;
@@ -101,15 +140,13 @@ init_camera();
    double D_c[4] = { -0.04456047071614869, 0.2307124415380794, -0.7307970854849617, 0.6943486286581442};
    Mat K=cv::Mat(3, 3, CV_64F, &K_c);
    Mat D=cv::Mat(4, 1, CV_64F, &D_c);
-     std::cout
-        << "K=" << K << std::endl
-        << "D=" << D << std::endl;
 cv::Size s;
 s.width=800;
 s.height=600;
 cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_16SC2, map1, map2);
   
            drawing = Mat::zeros( s, CV_8UC3 );
+           input = Mat::zeros( s, CV_8UC3 );
 
 
 
@@ -202,10 +239,13 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
                     warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
 
             } 
-            
-        cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+            // this converts the warpped image to a grey color space for further processing
+       // cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+
             if (Flatten == true)
         {
+            // this converts the warpped image to a grey color space for further processing
+            cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
             std::vector<Point2f> corner_pts;
             bool success = findChessboardCorners(gray, Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK  | CALIB_CB_NORMALIZE_IMAGE);
             if(success)
@@ -245,18 +285,32 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
                 //blur( imgray, imgray, Size(blur_slider,blur_slider) );
                 if (Blur_Value%2==0)
                     Blur_Value++;
-                medianBlur(gray,gray,Blur_Value);
+                medianBlur(warpped,warpped,Blur_Value);
             }
             if (Threshold_Slider>0 || count == 1)
             {
                 count=0;
-                threshold(gray,gray,Threshold_Slider, 255, 0);
+               // threshold(gray,gray,Threshold_Slider, 255, 0);
+                // create a color filtered image for knob processing
+                
+                inRange(warpped, colorFilter_min, colorFilter_max, gray);
+            //     Mat bleh[3];
+            //     split(warpped,bleh);
+            //     gray = bleh[2];
+
+            // adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,Threshold_size*2+1,1);
+            // //	Mat element = getStructuringElement(MORPH_RECT , (5,1));
+            
+            // Mat element = getStructuringElement( MORPH_RECT ,Size( 2*dilation_size + 1, 2*dilation_size+1 ),Point( dilation_size, dilation_size ) );
+            // //				   	  dilate( imgray, imgray, element );
+            // morphologyEx(gray,gray, MORPH_CLOSE, element);
             }
             else
             {
-            adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,50*2+1,1);
+            cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+            adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,Threshold_size*2+1,1);
             //	Mat element = getStructuringElement(MORPH_RECT , (5,1));
-            int dilation_size=1;
+            
             Mat element = getStructuringElement( MORPH_RECT ,Size( 2*dilation_size + 1, 2*dilation_size+1 ),Point( dilation_size, dilation_size ) );
             //				   	  dilate( imgray, imgray, element );
             morphologyEx(gray,gray, MORPH_CLOSE, element);
@@ -266,28 +320,32 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
 		   vector<Vec4i> hierarchy;
 		   findContours( gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );
            drawing = Mat::zeros( gray.size(), CV_8UC3 );
+           input = Mat::zeros(gray.size(),CV_8UC3);
            double closestMatch = DBL_MAX;
            int found=-1;
+            int foundShape = 0;
 		   for( size_t i = 0; i< contours.size(); i++ )
            {
-               
-               Scalar color = Scalar( 133, 133, 133 );
-			   approxPolyDP	(contours[i],contours[i],((double)polyfit/50.0) * arcLength(contours[i], true),true);
-               if (ContourCalibrate )
+               if (contours[i].size() < contourFilter)
                {
+                   continue;
+               }
+               Scalar color = Scalar( 133, 133, 133 );
+			   approxPolyDP	(contours[i],contours[i],((double)polyfit/1000.0) * arcLength(contours[i], true),true);
+            //    if (ContourCalibrate )
+            //    {
                   double testMatch = cv::pointPolygonTest	(	contours[i],cursorPos,true );
                   if (testMatch>=0 && testMatch<closestMatch)
                   {
                       closestMatch = testMatch;
                       found = i;
                   }
-			    drawContours( drawing, contours, i, color, 2, LINE_8, hierarchy, 0 );
-               }
-               else if (ShapeToFind.size() > 1)
+               //}
+               if (ShapeToFind.size() > 1 && foundShape==false)
                {
                    // start trying to find the contour
                     double ret = matchShapes(contours[i],ShapeToFind,CONTOURS_MATCH_I1,0.0);
-                    if (ret<0.05)
+                    if (ret<(matchValue/1000.0))
                     {     
                          Point knob_center;
                         cv::Moments m = cv::moments(contours[i], true);
@@ -309,8 +367,9 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
 							minDistancePoint = j;
 						}
 				  }
-				  double theta = 180-(atan2(contours[i][minDistancePoint].y-knob_center.y,contours[i][minDistancePoint].x-knob_center.x)*180.0/3.14159);
-
+				  double buffer = -90-(atan2(contours[i][minDistancePoint].y-knob_center.y,contours[i][minDistancePoint].x-knob_center.x)*180.0/M_PI);
+                    static double theta;
+                    theta = .95*theta + 0.05*buffer;
 
 				//  avgAngle = theta;// 0.9*avgAngle + 0.1*theta;
 				 // printf("%f\r\n",avgAngle);
@@ -321,23 +380,55 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
 				        fillPoly(drawing,contours[i],Scalar(0,0,255));
 			        line(drawing,knob_center,contours[i][minDistancePoint],Scalar(0,255,0));
                     
-                     draw_tray(drawing, 20, 300, knob_center,theta);
-                    break;
+                     draw_tray(drawing, 20, 300, knob_center,theta+270);
+
+                    if (TrayPresentCounter==0)
+                    {
+                        foundQRcode = false;
+                    }
+                    if (foundQRcode==false)
+                    {
+                        // Mat  rectifiedImage;
+                        // vector<Point> bbox;
+                        
+                        std::string data = qrDecoder.detectAndDecode(frame,noArray(),noArray());
+                        //bool found = qrDecoder.detect(frame, bbox);
+                        //if (found)
+                        if(data.length()>0)
+                        {
+                            cout << "Decoded Data : " << data << endl;
+                            foundQRcode = true;
+                        }
+                    }
+                     TrayPresentCounter = TrayPresentResetVal;
+                     foundShape=i;
+                    //break;
                     }
                }
+			    drawContours( input, contours, i, color, 2, LINE_8, hierarchy, 0 );
             }
-            if (found>=0 && ContourCalibrate)
+            if (found>=0 )
             {
-			   drawContours( drawing, contours, found, Scalar( 33, 200, 33 ), 2, LINE_8, hierarchy, 0 );
-               
+			   drawContours( input, contours, found, Scalar( 33, 200, 33 ), 2, LINE_8, hierarchy, 0 );
+               if ( ContourCalibrate)
+               {
                 ShapeToFind.clear();
                 for (int i=0; i<contours[found].size();i++)
                 {
                     ShapeToFind.push_back(contours[found][i]);
                 }
                cout << "Shape: " << ShapeToFind << endl;
+               }
+            } 
+            if (foundShape==false)
+            {
+                if (TrayPresentCounter>0)
+                    TrayPresentCounter--;
+            } else
+            {
+                
+			   drawContours( input, contours, found, Scalar( 255, 0, 0 ), 2, LINE_8, hierarchy, 0 );
             }
-
 
 
 
@@ -345,8 +436,11 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
         }
     switch (active_camera_mode)
     {
-        case 3:
+        case 4:
             cvtColor(drawing,outputFrame,COLOR_BGR2BGRA,0);
+            break;
+        case 3:
+            cvtColor(input,outputFrame,COLOR_BGR2BGRA,0);
             break;
         case 2:
             cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);

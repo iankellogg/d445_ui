@@ -47,6 +47,7 @@ void slider_event_cb(lv_event_t * e)
     int32_t *val = (int32_t*)lv_event_get_user_data(e);
     
     *val = lv_slider_get_value(ta);
+    printf("Slider: %d\r\n",*val);
 }
 void White_CB(lv_event_t * e)
 {
@@ -80,32 +81,32 @@ void Cam_Click_CB(lv_event_t * e)
     }
 }
 
-void ContourBtn_CB(lv_event_t * e)
-{
+// void ContourBtn_CB(lv_event_t * e)
+// {
 
-    lv_obj_t *ta = lv_event_get_target(e);
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
+//     lv_obj_t *ta = lv_event_get_target(e);
+//     lv_event_code_t code = lv_event_get_code(e);
+//     lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
     
-    // toggled state
-    if (code == LV_EVENT_VALUE_CHANGED)
-    {
-            lv_obj_t *label = lv_obj_get_child(ta,0);
-        if (lv_obj_get_state(ta)&LV_STATE_CHECKED == LV_STATE_CHECKED)
-        {
-            ContourCalibrate = true;   
-            lv_obj_add_event_cb(val, Cam_Click_CB, LV_EVENT_ALL, val);
-            lv_label_set_text(label,"Cancel"); 
-        }
-        else
-        {
-            ContourCalibrate = false;
-            lv_obj_remove_event_cb(val, Cam_Click_CB);
-            lv_label_set_text(label,"Contour");
-        }
-    }
+//     // toggled state
+//     if (code == LV_EVENT_VALUE_CHANGED)
+//     {
+//             lv_obj_t *label = lv_obj_get_child(ta,0);
+//         if (lv_obj_get_state(ta)&LV_STATE_CHECKED == LV_STATE_CHECKED)
+//         {
+//             ContourCalibrate = true;   
+//             lv_obj_add_event_cb(val, Cam_Click_CB, LV_EVENT_ALL, val);
+//             lv_label_set_text(label,"Cancel"); 
+//         }
+//         else
+//         {
+//             ContourCalibrate = false;
+//             lv_obj_remove_event_cb(val, Cam_Click_CB);
+//             lv_label_set_text(label,"Contour");
+//         }
+//     }
 
-}
+// }
 
 void colorwheel_cb(lv_event_t * e)
 {
@@ -118,6 +119,22 @@ void colorwheel_cb(lv_event_t * e)
     set_PWM_dutycycle(hPIGPIO,blue,color.ch.blue*max_duty/255);
     set_PWM_dutycycle(hPIGPIO,green,color.ch.green*max_duty/255);
     
+}
+
+void colorfilter_cb(lv_event_t *e)
+{
+    
+    lv_obj_t *ta = lv_event_get_target(e);
+    bool val = (bool)lv_event_get_user_data(e);
+    
+    lv_color_hsv_t color = lv_colorwheel_get_hsv(ta);
+    int32_t h = color.h/2;
+    int32_t s = color.s*255.0/100.0;
+    int32_t v = color.v*255.0/100.0;
+    printf ("H: %d S: %d V: %d\r\n",h,s,v);
+    SetColorFilter(val,h,s,v);
+    
+
 }
 
 
@@ -182,6 +199,24 @@ void DateTime_Timer(lv_timer_t * timer)
   }
   lv_label_set_text_fmt(DateTime,"%d/%d/%d %d:%02d %s",t->tm_mon+1,t->tm_mday,1900+t->tm_year,hour,t->tm_min,pm);
 
+}
+
+void color_radio_cb(lv_event_t * e)
+{
+     lv_obj_t * cw = (lv_obj_t*)lv_event_get_user_data(e);
+    lv_obj_t * cont = lv_event_get_current_target(e);
+    lv_obj_t * act_cb = lv_event_get_target(e);
+
+    /*Do nothing if the container was clicked*/
+    if(act_cb == cont) return;
+    for( int i = 0; i < lv_obj_get_child_cnt(cont); i++) {
+    lv_obj_t * child = lv_obj_get_child(cont, i);
+        lv_obj_clear_state(child, LV_STATE_CHECKED);   /*Uncheck the previous radio button*/
+    /*Do something with child*/
+    }
+
+    lv_obj_add_state(act_cb, LV_STATE_CHECKED);     /*Uncheck the current radio button*/
+    lv_colorwheel_set_mode(cw,lv_obj_get_index(act_cb));
 }
 
 
@@ -282,7 +317,8 @@ static lv_style_t style_title;
     lv_obj_t * cont2 = lv_obj_create(tab1);
 
     lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_size(cont2, 200, lv_pct(10));
+  lv_obj_set_size(cont2, 200, lv_pct(15));
+  //lv_obj_set_flex_grow(cont2, 1);
    //lv_obj_set_x(cont2, lv_pct(50));
    lv_obj_align(cont2,LV_ALIGN_TOP_RIGHT,0,0);
     lv_obj_add_event_cb(cont2, radio_event_handler, LV_EVENT_CLICKED, &active_camera_mode);
@@ -294,6 +330,9 @@ static lv_style_t style_title;
     // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
     chbox = lv_checkbox_create(cont2);
     lv_checkbox_set_text(chbox, "Warped");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Input");
     lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
     chbox = lv_checkbox_create(cont2);
     lv_checkbox_set_text(chbox, "Processed");
@@ -331,6 +370,7 @@ static lv_style_t style_title;
   lv_obj_set_size(button_row, lv_pct(100), lv_pct(10));
    //lv_obj_set_x(cont2, lv_pct(50));
    // button to pause video feed
+   //******************************************** BUttons ********************************/
    lv_obj_t *PauseButton = lv_btn_create(button_row);
     lv_obj_add_flag(PauseButton, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_height(PauseButton, LV_SIZE_CONTENT);
@@ -365,10 +405,12 @@ static lv_style_t style_title;
     label = lv_label_create(ContourButton);
     lv_label_set_text(label, "Contour");
     lv_obj_center(label);
-    //static button_cb_t contour_btn = {.Text = "Contour",.ToggledText="Cancel",.Value=&ContourCalibrate};
-    lv_obj_add_event_cb(ContourButton, ContourBtn_CB, LV_EVENT_VALUE_CHANGED, img_btn);
+            lv_obj_add_event_cb(img_btn, Cam_Click_CB, LV_EVENT_ALL, img_btn);
+    static button_cb_t contour_btn = {.Text = "Contour",.ToggledText="Cancel",.Value=&ContourCalibrate};
+    lv_obj_add_event_cb(ContourButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &contour_btn);
 
 
+   //******************************************** Sliders ********************************/
    //button for calibration
    // while calibration
    // threshold slider
@@ -384,8 +426,115 @@ static lv_style_t style_title;
     lv_slider_set_range(slider, 0, 255);
     lv_slider_set_value(slider, Threshold_Slider, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Threshold_Slider);
-   // blur slider
+/************************* Color Filter *******************/
+row = lv_label_create(rows);
+     lv_obj_set_height(row,250);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Filter Color");
+    lv_obj_t *cw_hsv_min= lv_colorwheel_create(row, true);
+    lv_obj_set_size(cw_hsv_min, 200, 200);
+    lv_colorwheel_set_mode(cw_hsv_min,LV_COLORWHEEL_MODE_HUE);
+    lv_obj_set_style_arc_width(cw_hsv_min,25,LV_PART_MAIN);
+    lv_obj_set_x(cw_hsv_min,300);
+    lv_color_hsv_t hsv;
+    int h,s,v;
+    lv_obj_add_event_cb(cw_hsv_min, colorfilter_cb, LV_EVENT_VALUE_CHANGED, 0);
+    GetColorFilter(0,&h,&s,&v);
+    hsv.h = h*2;
+    hsv.s = s*(255.0/100.0);
+    hsv.v = v*(255.0/100.0);
+    lv_colorwheel_set_hsv(cw_hsv_min,hsv);
+    lv_obj_t *cw_hsv_max= lv_colorwheel_create(row, true);
+    lv_obj_set_size(cw_hsv_max, 200, 200);
+    lv_colorwheel_set_mode(cw_hsv_max,LV_COLORWHEEL_MODE_HUE);
+    lv_obj_set_style_arc_width(cw_hsv_max,25,LV_PART_MAIN);
+    lv_obj_align_to(cw_hsv_max,cw_hsv_min,LV_ALIGN_OUT_RIGHT_MID,25,0);
+    lv_obj_add_event_cb(cw_hsv_max, colorfilter_cb, LV_EVENT_VALUE_CHANGED, 1);
+    GetColorFilter(1,&h,&s,&v);
+    hsv.h = h*2;
+    hsv.s = s*(255.0/100.0);
+    hsv.v = v*(255.0/100.0);
+    lv_colorwheel_set_hsv(cw_hsv_max,hsv);
 
+
+    cont2 = lv_obj_create(row);
+    lv_obj_align_to(cont2,cw_hsv_min,LV_ALIGN_OUT_LEFT_MID,0,0);
+    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_size(cont2, 120, 200);
+  //lv_obj_set_flex_grow(cont2, 1);
+   //lv_obj_set_x(cont2, lv_pct(50));
+
+    lv_obj_add_event_cb(cont2, color_radio_cb, LV_EVENT_CLICKED, cw_hsv_min);
+   chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Hue");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_state(chbox, LV_STATE_CHECKED);
+    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
+    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Sat");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Val");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    
+    cont2 = lv_obj_create(row);
+    lv_obj_align_to(cont2,cw_hsv_max,LV_ALIGN_OUT_RIGHT_MID,0,0);
+    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_size(cont2, 120, 200);
+  //lv_obj_set_flex_grow(cont2, 1);
+   //lv_obj_set_x(cont2, lv_pct(50));
+    lv_obj_add_event_cb(cont2, color_radio_cb, LV_EVENT_CLICKED, cw_hsv_max);
+   chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Hue");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_state(chbox, LV_STATE_CHECKED);
+    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
+    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Sat");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Val");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+   // blur slider
+   row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Auto Threshold Size");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(threshold_slider, 1);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, Threshold_size, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &Threshold_size);
+   row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Dilation");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(threshold_slider, 1);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, dilation_size, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &dilation_size);
+
+    
+   row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Contour Filter");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(threshold_slider, 1);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, contourFilter, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &contourFilter);
 
 row = lv_label_create(rows);
      lv_obj_set_height(row,50);
@@ -410,9 +559,21 @@ row = lv_label_create(rows);
     slider = lv_slider_create(row);
      lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
     //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 10);
+    lv_slider_set_range(slider, 0, 50);
     lv_slider_set_value(slider, polyfit, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &polyfit);
+row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Match");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        //lv_obj_set_flex_grow(row, 1);
+    slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(slider, 1);
+    lv_slider_set_range(slider, 0, 1000);
+    lv_slider_set_value(slider, matchValue, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &matchValue);
    
 
 row = lv_label_create(rows);
