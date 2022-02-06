@@ -340,6 +340,9 @@ static lv_style_t style_title;
     chbox = lv_checkbox_create(cont2);
     lv_checkbox_set_text(chbox, "AI");
     lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
+    chbox = lv_checkbox_create(cont2);
+    lv_checkbox_set_text(chbox, "Thermal");
+    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
 
 	// cvtColor(frame, frame, COLOR_BGR2BGRA,0);
     // uint length = frame.total()*frame.channels();
@@ -574,6 +577,19 @@ row = lv_label_create(rows);
     lv_slider_set_range(slider, 0, 1000);
     lv_slider_set_value(slider, matchValue, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &matchValue);
+    
+row = lv_label_create(rows);
+     lv_obj_set_height(row,50);
+     lv_obj_set_width(row,lv_pct(100));
+        lv_label_set_text(row, "Thermal Alpha");
+        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        //lv_obj_set_flex_grow(row, 1);
+    slider = lv_slider_create(row);
+     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
+    //lv_obj_set_flex_grow(slider, 1);
+    lv_slider_set_range(slider, 0, 255);
+    lv_slider_set_value(slider, thermalAlpha, LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &thermalAlpha);
    
 
 row = lv_label_create(rows);

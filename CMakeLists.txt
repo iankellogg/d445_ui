@@ -27,6 +27,10 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 find_package(pigpio REQUIRED)
 include_directories( ${pigpio_INCLUDE_DIRS} )
 
+find_package(PkgConfig)
+pkg_check_modules(mlx90640 REQUIRED mlx90640)
+# include_directories(${mlx9640_INCLUDE_DIRS})
+
 
 
 #ffmpeg
@@ -34,5 +38,5 @@ set(FFMPEG_LIBS avformat avcodec avutil swscale m z pthread)
 
 add_executable(main main.c  ${SOURCES} ${INCLUDES})
 add_compile_definitions(LV_CONF_INCLUDE_SIMPLE)
-target_link_libraries(main PRIVATE SDL2  m iw ${OpenCV_LIBS} ${FFMPEG_LIBS} pigpiod_if2 )
+target_link_libraries(main PRIVATE SDL2  m iw ${OpenCV_LIBS} ${FFMPEG_LIBS} pigpiod_if2 ${mlx90640_LIBRARIES})
 add_custom_target (run COMMAND ${EXECUTABLE_OUTPUT_PATH}/main)

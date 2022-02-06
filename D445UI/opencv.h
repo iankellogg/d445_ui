@@ -15,7 +15,7 @@
  #endif
 extern uint32_t active_camera_mode;
 extern int32_t Threshold_Slider,Blur_Value,Threshold_size,contourFilter,dilation_size;
-extern int32_t polyfit,matchValue;
+extern int32_t polyfit,matchValue,thermalAlpha;
 extern bool Calibration;
 extern bool Flatten,ContourCalibrate,Pause;
 

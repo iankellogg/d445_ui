@@ -12,6 +12,8 @@
 #include <cannon.h>
 #include <iostream>
 
+#include "mlx90640_ui.h"
+
 using namespace cv;
 using namespace std;
 
@@ -21,7 +23,7 @@ using namespace std;
 // 2 = Computer Vision recreation
 uint32_t active_camera_mode = 0;
 int32_t polyfit = 0;
-int32_t Threshold_Slider=500,Blur_Value=15,Threshold_size=100,contourFilter=10,dilation_size=2;
+int32_t Threshold_Slider=500,Blur_Value=15,Threshold_size=100,contourFilter=10,dilation_size=2,thermalAlpha=0;
 bool Flatten = false,ContourCalibrate=false,Pause=false;
 bool foundQRcode=true;
 int matchValue = 50;
@@ -274,7 +276,7 @@ void *CamUpdate(void *arg)
    lv_obj_t *img = (lv_obj_t*)arg;
 Mat frame;
 Mat gray;
-Mat warpped; 
+Mat warpped,warpped_blur; 
 Mat input;
 Mat drawing;
 Mat outputFrame;
@@ -304,6 +306,7 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
   
            drawing = Mat::zeros( s, CV_8UC3 );
            input = Mat::zeros( s, CV_8UC3 );
+           warpped_blur = Mat::zeros(s,CV_8UC3);
 
 
 
@@ -357,7 +360,7 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
             // blur values must be odd
             if (Blur_Value%2==0)
                 Blur_Value++;
-            medianBlur(warpped,warpped,Blur_Value);
+            medianBlur(warpped,warpped_blur,Blur_Value);
         }
         // process the warpped image into grayscale
         // the count is here because of a bug that causes a crash. i don't know why it is required
@@ -367,7 +370,7 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
             // threshold(gray,gray,Threshold_Slider, 255, 0);
             // create a color filtered image for knob processing
             // this will threshold the image using a HSV color filter
-            inRange(warpped, colorFilter_min, colorFilter_max, gray);
+            inRange(warpped_blur, colorFilter_min, colorFilter_max, gray);
             // lets try canny edge detection
             //cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
             Canny(gray,gray,Threshold_Slider,Threshold_Slider*Threshold_size,7,false);
@@ -376,7 +379,7 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
         }
         else
         {
-            cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+            cvtColor(warpped_blur, gray , COLOR_BGRA2GRAY,0);
             // this does gaussian thresholding, it will take small patches of the screen and figure out magically the best value to use to threshold
             // but its output is kind of noisy
             adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,Threshold_size*2+1,1);
@@ -463,13 +466,33 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
                 }
                 TrayPresentCounter = TrayPresentResetVal;
             }
-
-
-
-
         }
+
+
+        // time to process thermal data
+        thermal_image_t thermalImage;
+        thermal_color_image_t colorThermalImage;
+        thermal_getframe(thermalImage);
+        thermal_colorImage(thermalImage,colorThermalImage);
+        Mat thermal = Mat(24,32, CV_8UC3, colorThermalImage);
+        // for (int i=0;i<sizeof(thermal_color_image_t);i++)
+        // {
+        //     thermal.push_back(Scalar(colorThermalImage[i].r,colorThermalImage[i].g,colorThermalImage[i].b));
+            
+        // }
+        resize(thermal,thermal,gray.size());
+        // mix colors now
+        float beta = ( 1.0 - thermalAlpha/255.0 );
+   addWeighted( warpped, thermalAlpha/255.0, thermal, beta, 0.0, thermal);
+
+
+        // upscale to our size
+
     switch (active_camera_mode)
     {
+        case 5:
+            cvtColor(thermal,outputFrame,COLOR_BGR2BGRA,0);
+            break;
         case 4:
             cvtColor(drawing,outputFrame,COLOR_BGR2BGRA,0);
             break;
@@ -515,4 +538,7 @@ void start_camera_thread(lv_obj_t *img)
 {
     
     pthread_create(&CameraThread, NULL, &CamUpdate, img);
+
+    // start thermal
+    thermal_init();
 }
