@@ -20,8 +20,6 @@
 #define OFFSET_MICROS 850
 #define MLX_I2C_ADDR 0x33
 
-#define SENSOR_W 24
-#define SENSOR_H 32
 
 
     paramsMLX90640 mlx90640;
@@ -37,10 +35,22 @@ void thermal_getframe(thermal_image_t img)
     memcpy(img,image,sizeof(thermal_image_t));
     pthread_mutex_unlock(&mlx90640_mutex);
 }
+
+float thermal_getTempAtPoint(uint32_t x, uint32_t y)
+{
+    if (x>MLX90640_SENSOR_W)
+    return 0;
+    if (y>MLX90640_SENSOR_H)
+    return 0;
+            uint32_t pos = MLX90640_SENSOR_W * y + x;
+    return image[pos];
+}
+
+
     #define NUM_COLORS  5
 //var keys = ["white", "gold", "#c07", "#20008c", "black"];
     static float color[NUM_COLORS][3] = { {0,0,0},{32.0/255.0,0,140.0/255.0} , {204.0/255.0,0.0/255.0,119.0/255.0}, {1,221.0/255.0,0}, {1,1,1} };
-  //  static float color[NUM_COLORS][3] = {  {1,1,1} , {32.0/255.0,0,140.0/255.0}, {0,12.0/255.0,7.0/255.0}, {1,221.0/255.0,0},{0,0,0}};
+   // static float color[NUM_COLORS][3] = {  {1,1,1} , {32.0/255.0,0,140.0/255.0}, {204.0/255.0,0.0/255.0,119.0/255.0}, {1,221.0/255.0,0},{0,0,0}};
 
 void colorPixel(thermal_color_t *pixelOut, float pixelIn, float maxTemp, float minTemp)
 {
@@ -77,9 +87,11 @@ void thermal_colorImage(thermal_image_t image, thermal_color_image_t colorImage)
     static float minTemp = 0;
     float newMaxTemp = -INT_MAX;
     float newMinTemp = INT_MAX;
-   for(int y = 0; y < SENSOR_W; y++){
-        for(int x = 0; x < SENSOR_H; x++){
-            float val = image[SENSOR_H * (SENSOR_W-1-y) + x];
+   for(int y = 0; y < MLX90640_SENSOR_H; y++){
+        for(int x = 0; x < MLX90640_SENSOR_W; x++){
+            uint32_t pos = MLX90640_SENSOR_W * y + x;
+            //uint32_t pos = MLX90640_SENSOR_H * (MLX90640_SENSOR_W-1-y) +x;
+            float val = image[pos];
             if (val>newMaxTemp) 
             {
                 newMaxTemp = val;
@@ -89,7 +101,7 @@ void thermal_colorImage(thermal_image_t image, thermal_color_image_t colorImage)
             {
                 newMinTemp = val;
             }
-            colorPixel(& colorImage[SENSOR_H * (SENSOR_W-1-y) + x],val,maxTemp,minTemp);
+            colorPixel(& colorImage[pos],val,maxTemp,minTemp);
 
         }
     }
@@ -163,9 +175,9 @@ void thermalCameraTask(void *param)
     //         if(maxTemp < mlx90640To[i]) maxTemp = mlx90640To[i];
     //     }
 
-    //     for(int y = 0; y < SENSOR_W; y++){
-    //         for(int x = 0; x < SENSOR_H; x++){
-    //             float val = mlx90640To[SENSOR_H * (SENSOR_W-1-y) + x];
+    //     for(int y = 0; y < MLX90640_SENSOR_W; y++){
+    //         for(int x = 0; x < MLX90640_SENSOR_H; x++){
+    //             float val = mlx90640To[MLX90640_SENSOR_H * (MLX90640_SENSOR_W-1-y) + x];
     //            // put_pixel_false_colour(y, x, val);
     //         }
     //     }

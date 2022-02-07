@@ -475,15 +475,21 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
         thermal_getframe(thermalImage);
         thermal_colorImage(thermalImage,colorThermalImage);
         Mat thermal = Mat(24,32, CV_8UC3, colorThermalImage);
-        // for (int i=0;i<sizeof(thermal_color_image_t);i++)
-        // {
-        //     thermal.push_back(Scalar(colorThermalImage[i].r,colorThermalImage[i].g,colorThermalImage[i].b));
-            
-        // }
+
+        
+    char thermalText[15];
+    //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
+    float thermalScale_w = (float)gray.size().width/(float)MLX90640_SENSOR_W;
+    float thermalScale_h = (float)gray.size().height/(float)MLX90640_SENSOR_H;
+float tempAtPos = thermal_getTempAtPoint(cursorPos.x/thermalScale_w, cursorPos.y/thermalScale_h);
+    sprintf(thermalText,"%0.2f",tempAtPos);
+    
         resize(thermal,thermal,gray.size());
         // mix colors now
         float beta = ( 1.0 - thermalAlpha/255.0 );
    addWeighted( warpped, thermalAlpha/255.0, thermal, beta, 0.0, thermal);
+   
+    putText(thermal, thermalText, cursorPos, FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
 
 
         // upscale to our size
