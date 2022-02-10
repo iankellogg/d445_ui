@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#define FPS 8
+#define FPS 16
 #define FRAME_TIME_MICROS (1000000/FPS)
 
 // Despite the framerate being ostensibly FPS hz
@@ -19,6 +19,12 @@
 // to account for this.
 #define OFFSET_MICROS 850
 #define MLX_I2C_ADDR 0x33
+
+// 0 for normal
+// 1 for 90
+// 2 for 180
+// 3 for 270
+#define MLX90640_ROTATION 1
 
 
 
