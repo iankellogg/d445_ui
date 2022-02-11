@@ -414,7 +414,7 @@ static lv_style_t style_title;
     lv_label_set_text(label, "Flatten");
     lv_obj_center(label);
     static button_cb_t flt_btn = {.Text = "Flatten",.ToggledText="Cancel",.Value=&Flatten};
-    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &flt_btn);
+    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_CLICKED, &flt_btn);
 
 
    lv_obj_t *ContourButton = lv_btn_create(button_row);
@@ -576,7 +576,7 @@ row = lv_label_create(rows);
     slider = lv_slider_create(row);
      lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
     //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 1000);
+    lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, opencv_config.matchValue, LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.matchValue);
     

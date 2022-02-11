@@ -25,6 +25,7 @@ using namespace std;
 
 #define SHAPEFILENAME "shape.mat"
 #define CONFIGFILENAME "opencv.cfg"
+#define FLATTENFILENAME "flat.mat"
 
 // active camera mode switches which camera output is shown to the user
 opencv_config_t opencv_config = { .Threshold_Slider=500, .Blur_Value=5, .Threshold_size=100, .dilation_size=2, .thetaOffset=16753, .polyfit = 30, .matchValue = 50 };
@@ -90,6 +91,8 @@ void opencv_read_config()
       {
           printf("failed to open config\r\n");
       }
+
+
 }
 
 
@@ -178,9 +181,9 @@ bool FlattenImage( Mat& inputFrame, Mat& OutputTransform)
         points.push_back(corner_pts[((3*corner_pts_size)/4)]);
 
         vector<Point2f> warpPoints;
-        int scale=5; // this determines how big the flatten image will appear
+        float scale=7.5; // this determines how big the flatten image will appear
         // this will center the image
-        int dist = inputFrame.rows/scale; 
+        int dist = (float)inputFrame.cols/scale;
         int mid_y = inputFrame.cols/2;
         int mid_x = inputFrame.rows/2;
         // creating the position for the new image
@@ -192,6 +195,18 @@ bool FlattenImage( Mat& inputFrame, Mat& OutputTransform)
         // creates the transform that will be used later on
         OutputTransform = getPerspectiveTransform(points,warpPoints);
         std::cout << "Trans: " << OutputTransform << endl;
+
+  cv::FileStorage file;
+    file.open(FLATTENFILENAME, cv::FileStorage::WRITE);
+    if (file.isOpened())
+    {
+        // Write to file!
+        //file << "warp" << Trans;
+        file << "trans" << OutputTransform;
+        file.release();
+        printf("Saved config\r\n");
+    }
+        
         return true;
     }
     return false;
@@ -483,6 +498,19 @@ init_camera();
    double tran_c[3][3] = {{0.9887319429809974, 0.05716665516063728, -117.719050132904},{ -0.07706136048259898, 0.9687507839912129, 47.90186573630533},{ 1.14939671416363e-05, -7.609421690938215e-05, 1}};
 
    cv::Mat trans = cv::Mat(3,3,CV_64F,&tran_c);
+
+
+  cv::FileStorage file;
+    file.open(FLATTENFILENAME, cv::FileStorage::READ);
+	  if (file.isOpened()==true)
+	  {
+        file["trans"] >> trans;
+         file.release();
+	  } else
+      {
+          printf("failed to open tran\r\n");
+      }
+
     bool calibrated=true;
     bool flatten=true;
    int calCount=0;
@@ -500,99 +528,82 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
            warpped_blur = Mat::zeros(s,CV_8UC3);
 
 
-	  cv::FileStorage file(SHAPEFILENAME, cv::FileStorage::READ);
-	  if (file.isOpened()==true)
-	  {
-		  file["match"] >> ShapeToFind;
-	  }
+	//   cv::FileStorage file(SHAPEFILENAME, cv::FileStorage::READ);
+	//   if (file.isOpened()==true)
+	//   {
+	// 	  file["match"] >> ShapeToFind;
+	//   }
    // drawKeypoints(shapeFrame,keypoints_object,shapeFrame,Scalar(0,255,0));
-    Mat ShapeFrame = Mat::zeros(s,CV_8UC3);
 
-    vector<Point> Tri;
-    //active_camera_mode = 69;
-    // polylines(ShapeFrame,ShapeToFind,true,Scalar(0,255,0));
-    // minEnclosingTriangle(ShapeToFind,Tri);
-    // polylines(ShapeFrame,Tri,true,Scalar(255,0,0));
 
-Mat background = imread("background.png",1);
-Mat overlay = imread("tray v22.png",IMREAD_UNCHANGED);
-overlayImage(background,overlay,frame,Point(0,0));
-
-//cvtColor(frame,frame,COLOR_BGRA2BGR,0);
+Mat ShapeFrame = imread("tray v22.png",0);
+            Ptr<ORB> detector = ORB::create();
+            std::vector<KeyPoint> keypoints_object, keypoints_scene;
+            Mat descriptors_object, descriptors_scene;
+            detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
+cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
+             drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
 
 
     while (1) 
     {
-warpped = frame.clone();
-        // if (!Pause)
-        // {
-        //     cap.read(frame);
-        //     if (frame.empty())
-        //     {
-        //         continue;
-        //     }
-        // }
+        if (!Pause)
+        {
+            cap.read(frame);
+            if (frame.empty())
+            {
+                continue;
+            }
+        }
         
-   int Rotation = 180;//initialization rotation angle//
-   int Height = warpped.rows / 2;//getting middle point of rows//
-   int Width = warpped.cols / 2;//getting middle point of height//
-        Mat for_Rotation = getRotationMatrix2D(Point(Width, Height), (opencv_config.thetaOffset/100 - 180), 1);//affine transformation matrix for 2D rotation//
-     // Mat for_Rotated;//declaring a matrix for rotated image
-     Mat rot_overlay;
-      warpAffine(overlay,rot_overlay , for_Rotation, warpped.size());//applying affine transformation//
-      
-overlayImage(background,rot_overlay,input,Point(0,0));
-      AddGaussianNoise(input,input,0,10);
-
-        // if (Calibration == true) 
+         if (Calibration == true) 
          {
             
-        // } else {
-        //     calCount=0;
-        //     if (calibrated)
-        //     {    
-        //         try {
-        //          cv::remap(frame, warpped, map1, map2, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-        //         } catch (Exception e)
-        //         {
-        //             printf("remap fail\r\n");
-        //         }
-		// 	 }
-        //     if (flatten && Flatten==false)
-        //     { 
-        //         if (calibrated )
-        //             warpPerspective(warpped,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
-        //         else
-        //             warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+        } else {
+            calCount=0;
+            if (calibrated)
+            {    
+                try {
+                 cv::remap(frame, warpped, map1, map2, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+                } catch (Exception e)
+                {
+                    printf("remap fail\r\n");
+                }
+			 }
+            // if (flatten && Flatten==false)
+            // { 
+            //     if (calibrated )
+            //         warpPerspective(warpped,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+            //     else
+            //         warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
 
-        //     } 
+            // } 
+
+if (ContourCalibrate==true)
+{
+    ContourCalibrate=false;
+    
+    imwrite("tray v22.png", warpped);
+
+    ShapeFrame = imread("tray v22.png",0);
+            detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
+cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
+             drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
+}
+
         // if the flatten button is on, 
         // flatten the image to the calibration checkboard
             cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
-        // if (Flatten == true)
-        // {
-        //     //cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
-        //     if (FlattenImage( gray, trans)==true)
-        //     {
-        //         Flatten = false;
-        //         flatten = true;
-        //     }
-        // }
-        // // apply blur to the de-warpped image so we can see how it looks
-        // if (opencv_config.Blur_Value>0 && count==0)
-        // {
-        //     // blur values must be odd
-        //     if (opencv_config.Blur_Value%2==0)
-        //         opencv_config.Blur_Value++;
-        //     medianBlur(warpped,warpped_blur,opencv_config.Blur_Value);
-        // }
-        // else
-        // {
-        //     warpped_blur = warpped;
-        // }
-        // process the warpped image into grayscale
-        // the count is here because of a bug that causes a crash. i don't know why it is required
-        // if (opencv_config.Threshold_Slider>0 || count == 1)
+        if (Flatten == true)
+        {
+            //cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
+            if (FlattenImage( gray, trans)==true)
+            {
+                Flatten = false;
+                flatten = true;
+            }
+        } 
+        //  if (opencv_config.Threshold_Slider>0 || count == 1)
         // {
         //     count=0;
         //    // cvtColor(warpped_blur,gray,COLOR_BGRA2GRAY,0);
@@ -620,142 +631,54 @@ overlayImage(background,rot_overlay,input,Point(0,0));
         //     Mat element = getStructuringElement( MORPH_RECT ,Size( 2*opencv_config.dilation_size + 1, 2*opencv_config.dilation_size+1 ),Point( opencv_config.dilation_size, opencv_config.dilation_size ) );
         //     morphologyEx(gray,gray, MORPH_CLOSE, element);
         // }
+            detector->detectAndCompute( gray, noArray(), keypoints_scene, descriptors_scene );
+           // cvtColor(gray, gray , COLOR_GRAY2BGRA,0);
+             drawKeypoints(gray,keypoints_scene,gray,Scalar(0,255,0));
 
-		// 	   vector<vector<Point> > contours;
-		//    vector<Vec4i> hierarchy;
-		//    findContours( gray, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_TC89_L1 );
-         //   drawing = Mat::zeros( gray.size(), CV_8UC3 );
-        //    input = Mat::zeros(gray.size(),CV_8UC3);
-        //    double closestMatch = DBL_MAX, closestShapeMatch=DBL_MAX;
-        //    int found=-1;
-        //     int foundShape = 0;
-		//    for( size_t i = 0; i< contours.size(); i++ )
-        //    {
-        //        Scalar color = Scalar( 133, 133, 133 );
-		// 	   approxPolyDP	(contours[i],contours[i],((double)opencv_config.polyfit/1000.0) * arcLength(contours[i], true),true);
-        //     //    if (ContourCalibrate )
-        //     //    {
-        //           double testMatch = cv::pointPolygonTest	(	contours[i],cursorPos,true );
-        //           if (testMatch>=0 && testMatch<closestMatch)
-        //           {
-        //               closestMatch = testMatch;
-        //               found = i;
-        //           }
-        //        //}
-        //        if (ShapeToFind.size() > 1)
-        //        {
-        //            // start trying to find the contour
-        //             double ret = matchShapes(contours[i],ShapeToFind,CONTOURS_MATCH_I1,0.0);
-        //             // limit the match so we dont select everything
+             Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
+        
+                static double angle = -69.69;
+    {
+        
 
-        //             if (ret<(opencv_config.matchValue/1000.0))
-        //             {     
-        //                 if (ret<closestShapeMatch)
-        //                 {
-        //                     foundShape = i;
-        //                     closestShapeMatch=ret;
-        //                 }
-        //             }
-        //        }
-		// 	    drawContours( input, contours, i, color, 2, LINE_8, hierarchy, 0 );
-        //        // fillPoly(input,contours[i],Scalar(0,0,255));
-        //     }
-        //     if (found>=0 )
-        //     {
-		// 	   drawContours( input, contours, found, Scalar( 33, 200, 33 ), 2, LINE_8, hierarchy, 0 );
-        //        if ( ContourCalibrate)
-        //        {
-        //         ShapeToFind.clear();
-        //         for (int i=0; i<contours[found].size();i++)
-        //         {
-        //             ShapeToFind.push_back(contours[found][i]);
-        //         }
+                // std::vector< DMatch > matches;
+                // matcher->match(descriptors_object, descriptors_scene, matches);
 
-        //          cv::FileStorage file;
-        //         file.open(SHAPEFILENAME, cv::FileStorage::WRITE);
-        //         if (file.isOpened())
-        //         {
-        //         // Write to file!
-        //         //file << "warp" << Trans;
-        //         file << "match" << ShapeToFind;
-        //         file.release();
-        //         printf("Saved SHape\r\n");
-        //         }
-        //         else
-        //         {
-        //             printf("Failed to save shape\r\n");
-        //         }
-        //       // cout << "Shape: " << ShapeToFind << endl;
-        //        ContourCalibrate = false;
-        //        }
-        //     } 
-        //     if (foundShape==false)
-        //     {
-        //         if (TrayPresentCounter>0)
-        //         {
-        //             TrayPresentCounter--;
-        //         } else
-        //         {                         
-        //             char trayNotPresentText[] = "Tray Not Present";
-        //             putText(drawing, trayNotPresentText, Point2i(drawing.size().width/2,drawing.size().height/2), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
-        //         }
-        //     } else
-        //     {
-            //     processKnobMatch(contours[foundShape], drawing);
-			//     drawContours( input, contours, foundShape, Scalar( 255, 0, 0 ), 2, LINE_8, hierarchy, 0 );
-            //    // draw confidence
+                // double max_dist = 0; double min_dist = 10000;
 
+                // //-- Quick calculation of max and min distances between keypoints
+                // for (int i = 0; i < descriptors_object.rows; i++)
+                // {
+                //     double dist = matches[i].distance;
+                //     if (dist < min_dist) min_dist = dist;
+                //     if (dist > max_dist) max_dist = dist;
+                // }
+                // std::vector<DMatch> good_matches;
+                // for (int i = 0; i < descriptors_object.rows; i++)
+                // {
+                //     if (matches[i].distance < opencv_config.matchValue/10.0 * min_dist)
+                //     {
+                //         good_matches.push_back(matches[i]);
+                //     }
+                // }
 
-            //     char trayConfidenceText[15];
-            //     sprintf(trayConfidenceText,"%0.5f",closestShapeMatch);
-            //     putText(drawing, trayConfidenceText, Point2i(drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
-               
-            //    if (TrayPresentCounter==0)
-            //     {
-            //         foundQRcode = false;
-            //     }
-            //     if (foundQRcode==false)
-            //     {
-            Ptr<ORB> detector = ORB::create( );
-            std::vector<KeyPoint> keypoints_object, keypoints_scene;
-            Mat descriptors_object, descriptors_scene;
-            detector->detectAndCompute( warpped, noArray(), keypoints_object, descriptors_object );
-            detector->detectAndCompute( input, noArray(), keypoints_scene, descriptors_scene );
-             drawKeypoints(warpped,keypoints_object,warpped,Scalar(0,255,0));
-             drawKeypoints(input,keypoints_scene,input,Scalar(0,255,0));
-
-            Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce");
-                std::vector< DMatch > matches;
-                matcher->match(descriptors_object, descriptors_scene, matches);
-
-                double max_dist = 0; double min_dist = 100;
-
-                //-- Quick calculation of max and min distances between keypoints
-                for (int i = 0; i < descriptors_object.rows; i++)
-                {
-                    double dist = matches[i].distance;
-                    if (dist < min_dist) min_dist = dist;
-                    if (dist > max_dist) max_dist = dist;
-                }
-
-                // printf("-- Max dist : %f \n", max_dist);
-                // printf("-- Min dist : %f \n", min_dist);
-
-                //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
-                std::vector< DMatch > good_matches;
-
-                for (int i = 0; i < descriptors_object.rows; i++)
-                {
-                    if (matches[i].distance < 3 * min_dist)
-                    {
-                        good_matches.push_back(matches[i]);
-                    }
-                }
-
+    std::vector< std::vector<DMatch> > knn_matches;
+    matcher->knnMatch( descriptors_object, descriptors_scene, knn_matches, 2 );
+    //-- Filter matches using the Lowe's ratio test
+    float ratio_thresh = opencv_config.matchValue/100.0;
+    std::vector<DMatch> good_matches;
+    for (size_t i = 0; i < knn_matches.size(); i++)
+    {
+        if (knn_matches[i][0].distance < ratio_thresh * knn_matches[i][1].distance)
+        {
+            good_matches.push_back(knn_matches[i][0]);
+        }
+    }
                 Mat img_matches;
 
-                drawMatches(warpped, keypoints_object, input, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+                drawMatches(input, keypoints_object, gray, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
+                        resize(img_matches,drawing,s);
                 //-- Localize the object
                 std::vector<Point2f> obj;
                 std::vector<Point2f> scene;
@@ -766,13 +689,14 @@ overlayImage(background,rot_overlay,input,Point(0,0));
                     obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
                     scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
                 }
-                double angle = -69.69;
-                if (good_matches.size() > 4) {
+                if (good_matches.size() > 20) {
 
-                resize(img_matches,drawing,s);
-                Mat H = findHomography(obj, scene, RANSAC);
-               angle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
+                        
+                        Mat H = findHomography(obj, scene, RANSAC);
+                        if (H.rows*H.cols != 0)
+                    angle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
                 }
+    }
 
 
 
@@ -794,7 +718,7 @@ overlayImage(background,rot_overlay,input,Point(0,0));
                         char angleText[15];
                         //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
                         sprintf(angleText,"%0.02f",angle);
-                        putText(drawing, angleText, Point(8*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
+                        putText(drawing, angleText, Point(1*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
                         
 
                 //         if (foundQRcode==false)
@@ -844,9 +768,6 @@ float tempAtPos = thermal_getTempAtPoint(cursorPos.y/thermalScale_h,MLX90640_SEN
 
     switch (active_camera_mode)
     {
-        case 69:
-            cvtColor(ShapeFrame,outputFrame,COLOR_BGR2BGRA,0);
-            break;
         case 5:
             cvtColor(thermal,outputFrame,COLOR_BGR2BGRA,0);
             break;
@@ -858,7 +779,8 @@ float tempAtPos = thermal_getTempAtPoint(cursorPos.y/thermalScale_h,MLX90640_SEN
             cvtColor(input,outputFrame,COLOR_BGR2BGRA,0);
             break;
         case 2:
-            cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
+            //cvtColor(gray, outputFrame, COLOR_BGR2BGRA,0);
+           cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
             break;
         case 1:
             cvtColor(warpped, outputFrame, COLOR_BGR2BGRA,0);
