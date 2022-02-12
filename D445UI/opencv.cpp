@@ -686,6 +686,7 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
 
                 for (int i = 0; i < good_matches.size(); i++)
                 {
+          
                     //-- Get the keypoints from the good matches
                     obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
                     scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
@@ -698,6 +699,7 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                     angle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
                     if (angle<0)
                         angle += 360.0;
+                    angle = 360.0 - angle;
                 } }
                 catch (Exception e)
                 {
