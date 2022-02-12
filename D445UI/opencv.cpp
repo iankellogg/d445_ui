@@ -656,10 +656,10 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                 // std::vector<DMatch> good_matches;
                 // for (int i = 0; i < descriptors_object.rows; i++)
                 // {
-                //     if (matches[i].distance < opencv_config.matchValue/10.0 * min_dist)
-                //     {
+                //     // if (matches[i].distance < opencv_config.matchValue/10.0 * min_dist)
+                //     // {
                 //         good_matches.push_back(matches[i]);
-                //     }
+                //     // }
                 // }
 
     std::vector< std::vector<DMatch> > knn_matches;
@@ -669,15 +669,16 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
     std::vector<DMatch> good_matches;
     for (size_t i = 0; i < knn_matches.size(); i++)
     {
-        if (knn_matches[i][0].distance < ratio_thresh * knn_matches[i][1].distance)
-        {
+         if (knn_matches[i][0].distance < ratio_thresh * knn_matches[i][1].distance)
+         {
             good_matches.push_back(knn_matches[i][0]);
         }
     }
+
                 Mat img_matches;
-
+                try {
                 drawMatches(input, keypoints_object, gray, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
+               
                         resize(img_matches,drawing,s);
                 //-- Localize the object
                 std::vector<Point2f> obj;
@@ -689,12 +690,18 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                     obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
                     scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
                 }
-                if (good_matches.size() > 20) {
+                if (good_matches.size() > 4) {
 
-                        
-                        Mat H = findHomography(obj, scene, RANSAC);
+                        //findEssentialMat(obj, , double focal=1.0, Point2d pp=Point2d(0, 0), int method=RANSAC, double prob=0.999, double threshold=1.0, OutputArray mask=noArray() )
+                        Mat H = findHomography(obj, scene, RANSAC,1.0,noArray(),5000,0.99999999999);
                         if (H.rows*H.cols != 0)
                     angle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
+                    if (angle<0)
+                        angle += 360.0;
+                } }
+                catch (Exception e)
+                {
+
                 }
     }
 
@@ -779,8 +786,8 @@ float tempAtPos = thermal_getTempAtPoint(cursorPos.y/thermalScale_h,MLX90640_SEN
             cvtColor(input,outputFrame,COLOR_BGR2BGRA,0);
             break;
         case 2:
-            //cvtColor(gray, outputFrame, COLOR_BGR2BGRA,0);
-           cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
+            cvtColor(gray, outputFrame, COLOR_BGR2BGRA,0);
+           //cvtColor(gray, outputFrame, COLOR_GRAY2BGRA,0);
             break;
         case 1:
             cvtColor(warpped, outputFrame, COLOR_BGR2BGRA,0);
