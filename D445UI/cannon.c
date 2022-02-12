@@ -1,6 +1,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdio.h>
 #include <cannon.h>
 #include <Settings/settings.h>
 /* Littlevgl specific */
@@ -16,24 +17,29 @@
 #include <pigpiod_if2.h>
 
 #include "opencv.h"
-static int32_t hPIGPIO = 0;
 
-static int32_t max_duty;
-static const uint32_t white = 4;
-static const uint32_t red    = 17;
-static const uint32_t green  = 22;
-static const uint32_t blue   = 27;
-static const uint32_t freq   = 1000;
-
-typedef struct
+typedef struct 
 {
-    char *Text;
-    char *ToggledText;
-    int32_t *Value;
-} button_cb_t;
+    // the current angle of the tray
+    float trayAngle;
+    // the numeric position (1-20)
+    int trayPosition;
+    // how confident we are about the trays position
+    // if this number is "low" issue a warning that maybe the tray or camera is dirty
+    float trayConfidence;
+    // if the tray is detected
+    struct statusBits
+    {
+        bool trayPresent:1;
+        bool TooDark:1; // camera can somehow tell that its too dark to see anything
+        bool trayCantMove:1;   // tray tried to move but didn't
+        bool trayWrongPosition:1;   // tray moved but can't get to the requested position
+    };
 
 
-static int32_t Brightness = 100;
+} camera_status_t;
+
+
 
 
     lv_obj_t * kb;
@@ -56,37 +62,6 @@ void slider_event_cb(lv_event_t * e)
         opencv_save_config();
     }
     printf("Slider: %d\r\n",*val);
-    }
-}
-void White_CB(lv_event_t * e)
-{
-    lv_obj_t *ta = lv_event_get_target(e);
-    int32_t *val = (int32_t*)lv_event_get_user_data(e);
-    
-    *val = lv_slider_get_value(ta);
-     set_PWM_dutycycle(hPIGPIO,white,(*val)*max_duty/100.0);
-    set_PWM_dutycycle(hPIGPIO,red,0);
-    set_PWM_dutycycle(hPIGPIO,blue,0);
-    set_PWM_dutycycle(hPIGPIO,green,0);
-}
-void Cam_Click_CB(lv_event_t * e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_point_t p;
-    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
-//        uint16_t btn_pr = LV_BTNMATRIX_BTN_NONE;
-    /*Search the pressed area*/
-    if (code == LV_EVENT_RELEASED)
-    {
-        lv_indev_t *indev = lv_indev_get_act();
-        lv_indev_type_t indev_type = lv_indev_get_type(indev);
-        if (indev_type == LV_INDEV_TYPE_ENCODER || indev_type == LV_INDEV_TYPE_KEYPAD) return LV_RES_OK;
-
-        lv_indev_get_point(indev, &p);
-        p.x = p.x-val->coords.x1;
-        p.y=p.y-val->coords.y1;
-        printf("Clicked on image: x: %d y: %d\r\n",p.x,p.y);
-        Send_Contour_Cursor_Pos(p.x,p.y);
     }
 }
 
@@ -117,34 +92,7 @@ void Cam_Click_CB(lv_event_t * e)
 
 // }
 
-void colorwheel_cb(lv_event_t * e)
-{
-    lv_obj_t *ta = lv_event_get_target(e);
-    lv_obj_t *val = (lv_obj_t*)lv_event_get_user_data(e);
-    
-    lv_slider_set_value(val,0,false);
-    lv_color_t color = lv_colorwheel_get_rgb(ta);
-    set_PWM_dutycycle(hPIGPIO,red,color.ch.red*max_duty/255);
-    set_PWM_dutycycle(hPIGPIO,blue,color.ch.blue*max_duty/255);
-    set_PWM_dutycycle(hPIGPIO,green,color.ch.green*max_duty/255);
-    
-}
 
-void colorfilter_cb(lv_event_t *e)
-{
-    
-    lv_obj_t *ta = lv_event_get_target(e);
-    bool val = (bool)lv_event_get_user_data(e);
-    
-    lv_color_hsv_t color = lv_colorwheel_get_hsv(ta);
-    int32_t h = color.h/2;
-    int32_t s = color.s*255.0/100.0;
-    int32_t v = color.v*255.0/100.0;
-    printf ("H: %d S: %d V: %d\r\n",h,s,v);
-    SetColorFilter(val,h,s,v);
-    
-
-}
 
 
 void button_event_cb(lv_event_t * e)
@@ -215,26 +163,9 @@ void DateTime_Timer(lv_timer_t * timer)
 
 }
 
-void color_radio_cb(lv_event_t * e)
-{
-     lv_obj_t * cw = (lv_obj_t*)lv_event_get_user_data(e);
-    lv_obj_t * cont = lv_event_get_current_target(e);
-    lv_obj_t * act_cb = lv_event_get_target(e);
-
-    /*Do nothing if the container was clicked*/
-    if(act_cb == cont) return;
-    for( int i = 0; i < lv_obj_get_child_cnt(cont); i++) {
-    lv_obj_t * child = lv_obj_get_child(cont, i);
-        lv_obj_clear_state(child, LV_STATE_CHECKED);   /*Uncheck the previous radio button*/
-    /*Do something with child*/
-    }
-
-    lv_obj_add_state(act_cb, LV_STATE_CHECKED);     /*Uncheck the current radio button*/
-    lv_colorwheel_set_mode(cw,lv_obj_get_index(act_cb));
-}
 
 
-static void radio_event_handler(lv_event_t * e)
+void radio_event_handler(lv_event_t * e)
 {
     uint32_t * active_id = (uint32_t*)lv_event_get_user_data(e);
     lv_obj_t * cont = lv_event_get_current_target(e);
@@ -262,22 +193,6 @@ void create_cannon_application(void)
 
 opencv_read_config();
 
-     hPIGPIO = pigpio_start(NULL, NULL);
-     if (hPIGPIO<0)
-     {
-         printf("Unable to connect to PIGPIOD\r\n");
-     }
-
-
-     set_PWM_frequency(hPIGPIO,white, freq);
-     set_PWM_frequency(hPIGPIO,red, freq);
-     set_PWM_frequency(hPIGPIO,blue, freq);
-     set_PWM_frequency(hPIGPIO,green, freq);
-     max_duty = get_PWM_real_range(hPIGPIO,white);
-     set_PWM_dutycycle(hPIGPIO,white,max_duty);
-    set_PWM_dutycycle(hPIGPIO,red,0);
-    set_PWM_dutycycle(hPIGPIO,blue,0);
-    set_PWM_dutycycle(hPIGPIO,green,0);
 
     kb = lv_keyboard_create(lv_layer_top());
     lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
@@ -330,306 +245,6 @@ static lv_style_t style_title;
     //static Mat colorFrame;
 
 
-    lv_obj_t * cont2 = lv_obj_create(tab1);
-
-    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_size(cont2, 200, lv_pct(15));
-  //lv_obj_set_flex_grow(cont2, 1);
-   //lv_obj_set_x(cont2, lv_pct(50));
-   lv_obj_align(cont2,LV_ALIGN_TOP_RIGHT,0,0);
-    lv_obj_add_event_cb(cont2, radio_event_handler, LV_EVENT_CLICKED, &active_camera_mode);
-    lv_obj_t * chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Raw");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
-    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Warped");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Input");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Processed");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "AI");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_add_state(chbox, LV_STATE_CHECKED);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Thermal");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-
-	// cvtColor(frame, frame, COLOR_BGR2BGRA,0);
-    // uint length = frame.total()*frame.channels();
-    // uchar * arr = frame.isContinuous()? frame.data: frame.clone().data;
-    lv_obj_t *img_btn = lv_btn_create(tab1);
-    lv_obj_remove_style_all(img_btn);
-     lv_obj_t *img = lv_img_create(img_btn);
-   static  lv_img_dsc_t imgDsc;
-    static const uint8_t emptyFrame[800*600*4];
-    imgDsc.data = emptyFrame;
-    imgDsc.data_size = 0;
-    imgDsc.header.h = 600;
-    imgDsc.header.w = 800;
-    imgDsc.header.always_zero=0;
-    imgDsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-     lv_img_set_src(img,&imgDsc);
-
-    start_camera_thread(img);
-
-    lv_obj_t * rows = lv_obj_create(tab1);
-    lv_obj_set_flex_flow(rows, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_size(rows, lv_pct(100), lv_pct(100));
-   lv_obj_align_to(rows,img,LV_ALIGN_OUT_BOTTOM_LEFT,0,0);
-    
-    /** Button Row **/
-    lv_obj_t * button_row = lv_obj_create(rows);
-    lv_obj_set_flex_flow(button_row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_size(button_row, lv_pct(100), lv_pct(10));
-   //lv_obj_set_x(cont2, lv_pct(50));
-   // button to pause video feed
-   //******************************************** BUttons ********************************/
-   lv_obj_t *PauseButton = lv_btn_create(button_row);
-    lv_obj_add_flag(PauseButton, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_height(PauseButton, LV_SIZE_CONTENT);
-    label = lv_label_create(PauseButton);
-    lv_label_set_text(label, "Pause");
-    static button_cb_t pause_btn = {.Text = "Pause",.ToggledText="Cancel",.Value=&Pause};
-    lv_obj_add_event_cb(PauseButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &pause_btn);
-    lv_obj_center(label);
-
-   lv_obj_t *CalibrationButton = lv_btn_create(button_row);
-   lv_obj_add_flag(CalibrationButton, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_set_height(CalibrationButton, LV_SIZE_CONTENT);
-    label = lv_label_create(CalibrationButton);
-    lv_label_set_text(label, "Calibrate");
-    lv_obj_center(label);
-    static button_cb_t cal_btn = {.Text = "Calibrate",.ToggledText="Cancel",.Value=&Calibration};
-    lv_obj_add_event_cb(CalibrationButton, button_event_cb, LV_EVENT_VALUE_CHANGED, &cal_btn);
-
-   lv_obj_t *FlattenButton = lv_btn_create(button_row);
-    lv_obj_set_height(FlattenButton, LV_SIZE_CONTENT);
-    label = lv_label_create(FlattenButton);
-    lv_label_set_text(label, "Flatten");
-    lv_obj_center(label);
-    static button_cb_t flt_btn = {.Text = "Flatten",.ToggledText="Cancel",.Value=&Flatten};
-    lv_obj_add_event_cb(FlattenButton, button_event_cb, LV_EVENT_CLICKED, &flt_btn);
-
-
-   lv_obj_t *ContourButton = lv_btn_create(button_row);
-    lv_obj_set_height(ContourButton, LV_SIZE_CONTENT);
-    label = lv_label_create(ContourButton);
-    lv_label_set_text(label, "Contour");
-    lv_obj_center(label);
-            lv_obj_add_event_cb(img_btn, Cam_Click_CB, LV_EVENT_ALL, img_btn);
-    static button_cb_t contour_btn = {.Text = "Contour",.ToggledText="Cancel",.Value=&ContourCalibrate};
-    lv_obj_add_event_cb(ContourButton, button_event_cb, LV_EVENT_CLICKED, &contour_btn);
-
-
-   //******************************************** Sliders ********************************/
-   //button for calibration
-   // while calibration
-   // threshold slider
-     lv_obj_t *row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Threshold");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-       // lv_obj_set_flex_grow(row, 1);
-     lv_obj_t *slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(threshold_slider, 1);
-    lv_slider_set_range(slider, 0, 1000);
-    lv_slider_set_value(slider, opencv_config.Threshold_Slider, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.Threshold_Slider);
-/************************* Color Filter *******************/
-row = lv_label_create(rows);
-     lv_obj_set_height(row,250);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Filter Color");
-    lv_obj_t *cw_hsv_min= lv_colorwheel_create(row, true);
-    lv_obj_set_size(cw_hsv_min, 200, 200);
-    lv_colorwheel_set_mode(cw_hsv_min,LV_COLORWHEEL_MODE_HUE);
-    lv_obj_set_style_arc_width(cw_hsv_min,25,LV_PART_MAIN);
-    lv_obj_set_x(cw_hsv_min,300);
-    lv_color_hsv_t hsv;
-    int h,s,v;
-    lv_obj_add_event_cb(cw_hsv_min, colorfilter_cb, LV_EVENT_VALUE_CHANGED, 0);
-    GetColorFilter(0,&h,&s,&v);
-    hsv.h = h*2;
-    hsv.s = s*(255.0/100.0);
-    hsv.v = v*(255.0/100.0);
-    lv_colorwheel_set_hsv(cw_hsv_min,hsv);
-    lv_obj_t *cw_hsv_max= lv_colorwheel_create(row, true);
-    lv_obj_set_size(cw_hsv_max, 200, 200);
-    lv_colorwheel_set_mode(cw_hsv_max,LV_COLORWHEEL_MODE_HUE);
-    lv_obj_set_style_arc_width(cw_hsv_max,25,LV_PART_MAIN);
-    lv_obj_align_to(cw_hsv_max,cw_hsv_min,LV_ALIGN_OUT_RIGHT_MID,25,0);
-    lv_obj_add_event_cb(cw_hsv_max, colorfilter_cb, LV_EVENT_VALUE_CHANGED, 1);
-    GetColorFilter(1,&h,&s,&v);
-    hsv.h = h*2;
-    hsv.s = s*(255.0/100.0);
-    hsv.v = v*(255.0/100.0);
-    lv_colorwheel_set_hsv(cw_hsv_max,hsv);
-
-
-    cont2 = lv_obj_create(row);
-    lv_obj_align_to(cont2,cw_hsv_min,LV_ALIGN_OUT_LEFT_MID,0,0);
-    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_size(cont2, 120, 200);
-  //lv_obj_set_flex_grow(cont2, 1);
-   //lv_obj_set_x(cont2, lv_pct(50));
-
-    lv_obj_add_event_cb(cont2, color_radio_cb, LV_EVENT_CLICKED, cw_hsv_min);
-   chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Hue");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_add_state(chbox, LV_STATE_CHECKED);
-    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
-    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Sat");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Val");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-
-    
-    cont2 = lv_obj_create(row);
-    lv_obj_align_to(cont2,cw_hsv_max,LV_ALIGN_OUT_RIGHT_MID,0,0);
-    lv_obj_set_flex_flow(cont2, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_size(cont2, 120, 200);
-  //lv_obj_set_flex_grow(cont2, 1);
-   //lv_obj_set_x(cont2, lv_pct(50));
-    lv_obj_add_event_cb(cont2, color_radio_cb, LV_EVENT_CLICKED, cw_hsv_max);
-   chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Hue");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_add_state(chbox, LV_STATE_CHECKED);
-    // lv_obj_add_style(obj, &style_radio, LV_PART_INDICATOR);
-    // lv_obj_add_style(obj, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Sat");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-    chbox = lv_checkbox_create(cont2);
-    lv_checkbox_set_text(chbox, "Val");
-    lv_obj_add_flag(chbox, LV_OBJ_FLAG_EVENT_BUBBLE);
-
-   // blur slider
-   row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Auto Threshold Size");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(threshold_slider, 1);
-    lv_slider_set_range(slider, 0, 1000);
-    lv_slider_set_value(slider, opencv_config.Threshold_size, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.Threshold_size);
-   row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Dilation");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(threshold_slider, 1);
-    lv_slider_set_range(slider, 0, 100);
-    lv_slider_set_value(slider, opencv_config.dilation_size, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.dilation_size);
-
-
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Blur");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 25);
-    lv_slider_set_value(slider, opencv_config.Blur_Value, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb,LV_EVENT_ALL, &opencv_config.Blur_Value);
-
-    
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Poly Fit");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 100);
-    lv_slider_set_value(slider, opencv_config.polyfit, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.polyfit);
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Match");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 100);
-    lv_slider_set_value(slider, opencv_config.matchValue, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.matchValue);
-    
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Thermal Alpha");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 255);
-    lv_slider_set_value(slider, thermalAlpha, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &thermalAlpha);
-   
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Angle Offset");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 36000);
-    lv_slider_set_value(slider, opencv_config.thetaOffset, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_ALL, &opencv_config.thetaOffset);
-
-row = lv_label_create(rows);
-     lv_obj_set_height(row,50);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Stage Brightness");
-        lv_label_set_long_mode(row, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        //lv_obj_set_flex_grow(row, 1);
-    slider = lv_slider_create(row);
-     lv_obj_align(slider,LV_ALIGN_TOP_RIGHT,0,25);
-    //lv_obj_set_flex_grow(slider, 1);
-    lv_slider_set_range(slider, 0, 100);
-    lv_slider_set_value(slider, Brightness, LV_ANIM_OFF);
-    lv_obj_add_event_cb(slider, White_CB, LV_EVENT_VALUE_CHANGED, &Brightness);
-   
-
-row = lv_label_create(rows);
-     lv_obj_set_height(row,250);
-     lv_obj_set_width(row,lv_pct(100));
-        lv_label_set_text(row, "Stage color");
-    lv_obj_t *cw_rgb = lv_colorwheel_create(row, true);
-    lv_obj_set_size(cw_rgb, 200, 200);
-    lv_colorwheel_set_mode(cw_rgb,LV_COLORWHEEL_MODE_HUE);
-    lv_obj_set_style_arc_width(cw_rgb,25,LV_PART_MAIN);
-    lv_obj_center(cw_rgb);
-    lv_obj_add_event_cb(cw_rgb, colorwheel_cb, LV_EVENT_VALUE_CHANGED, slider);
     
 
 

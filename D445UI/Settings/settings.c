@@ -3,6 +3,7 @@
 #include "Settings/TestMethods.h"
 #include "Settings/BathSettings.h"
 #include "Settings/Network.h"
+#include "Settings/camera.h"
 
 static lv_obj_t *tab;
 static lv_obj_t * list1;
@@ -69,7 +70,7 @@ void create_settings_tab(lv_obj_t *tabRef)
     lv_obj_clear_flag(tab, LV_OBJ_FLAG_SCROLLABLE);
 
 lv_obj_t * menu = lv_menu_create(tab);
-   lv_obj_set_size(menu, lv_pct(30),lv_pct(100));
+   lv_obj_set_size(menu, lv_pct(100),lv_pct(100));
    lv_obj_set_style_pad_top(menu,50,LV_PART_MAIN);
     lv_color_t bg_color = lv_obj_get_style_bg_color(menu, 0);
     if(lv_color_brightness(bg_color) > 127) {
@@ -77,10 +78,8 @@ lv_obj_t * menu = lv_menu_create(tab);
     }else{
         lv_obj_set_style_bg_color(menu, lv_color_darken(lv_obj_get_style_bg_color(menu, 0), 50), 0);
     }
-    // this adds the back button that 
-    lv_menu_set_mode_root_back_btn(menu, LV_MENU_ROOT_BACK_BTN_ENABLED);
-    lv_obj_add_event_cb(menu, back_event_handler, LV_EVENT_CLICKED, menu);
-    lv_obj_set_size(menu, lv_disp_get_hor_res(NULL), lv_disp_get_ver_res(NULL));
+    lv_menu_set_mode_root_back_btn(menu, LV_MENU_ROOT_BACK_BTN_DISABLED);
+    //lv_obj_set_size(menu, lv_disp_get_hor_res(NULL), lv_disp_get_ver_res(NULL));
     lv_obj_center(menu);
 
     lv_obj_t * cont;
@@ -88,48 +87,15 @@ lv_obj_t * menu = lv_menu_create(tab);
 
     /*Create sub pages*/
 
-    lv_obj_t * sub_sound_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_sound_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    lv_menu_separator_create(sub_sound_page);
-    section = lv_menu_section_create(sub_sound_page);
-    create_switch(section, LV_SYMBOL_AUDIO, "Sound", false);
 
-    lv_obj_t * sub_display_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_display_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    lv_menu_separator_create(sub_display_page);
-    section = lv_menu_section_create(sub_display_page);
-    create_slider(section, LV_SYMBOL_SETTINGS, "Brightness", 0, 150, 100);
 
-    lv_obj_t * sub_software_info_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_software_info_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    section = lv_menu_section_create(sub_software_info_page);
-    create_text(section, NULL, "Version 1.0", 0);
-
-    lv_obj_t * sub_legal_info_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_legal_info_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    section = lv_menu_section_create(sub_legal_info_page);
-    for(uint32_t i=0; i<15; i++){
-        create_text(section, NULL, "This is a long long long long long long long long long text, if it is long enough it may scroll.", 0);
-    }
-
-    lv_obj_t * sub_about_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_about_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    lv_menu_separator_create(sub_about_page);
-    section = lv_menu_section_create(sub_about_page);
-    cont = create_text(section, NULL, "Software information", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_software_info_page);
-    cont = create_text(section, NULL, "Legal information", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_legal_info_page);
-
-    lv_obj_t * sub_menu_mode_page = lv_menu_page_create(menu, NULL);
-    lv_obj_set_style_pad_hor(sub_menu_mode_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
-    lv_menu_separator_create(sub_menu_mode_page);
-    section = lv_menu_section_create(sub_menu_mode_page);
-    cont = create_switch(section, LV_SYMBOL_AUDIO, "Sidebar enable", true);
-    lv_obj_add_event_cb(lv_obj_get_child(cont, 2), switch_handler, LV_EVENT_VALUE_CHANGED, menu);
+    // lv_obj_t * sub_menu_mode_page = lv_menu_page_create(menu, NULL);
+    // lv_obj_set_style_pad_hor(sub_menu_mode_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
+    // lv_menu_separator_create(sub_menu_mode_page);
 
     /*Create a root page*/
     root_page = lv_menu_page_create(menu, "Settings");
+    lv_obj_set_width(root_page,200);
     lv_obj_set_style_pad_hor(root_page, lv_obj_get_style_pad_left(lv_menu_get_main_header(menu), 0), 0);
 
 
@@ -142,13 +108,16 @@ lv_obj_t * menu = lv_menu_create(tab);
     create_text(root_page, NULL, "Service", 0);
     section = lv_menu_section_create(root_page);
     cont = create_text(section, LV_SYMBOL_PLUS, "Temperature", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_about_page);
-    cont = create_text(section, LV_SYMBOL_EYE_OPEN, "Camera", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_about_page);
+
+
+    lv_obj_t *Camera_page = Create_Camera_Menu(section, menu);
+
+
     cont = create_text(section, LV_SYMBOL_REFRESH, "Motor", 0);
-    lv_menu_set_load_page_event(menu, cont, sub_about_page);
 
     lv_menu_set_sidebar_page(menu, root_page);
+    
+    lv_obj_set_width(((lv_menu_t *)menu)->sidebar,200);
     lv_menu_set_page(menu, TestMethod_Page);
 
     lv_event_send(lv_obj_get_child(lv_obj_get_child(lv_menu_get_cur_sidebar_page(menu), 0), 0), LV_EVENT_CLICKED, NULL);

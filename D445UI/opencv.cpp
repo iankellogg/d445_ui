@@ -534,19 +534,22 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
 	// 	  file["match"] >> ShapeToFind;
 	//   }
    // drawKeypoints(shapeFrame,keypoints_object,shapeFrame,Scalar(0,255,0));
+Mat background = imread("background.png",0);
 
 
 Mat ShapeFrame = imread("tray v22.png",0);
-            Ptr<ORB> detector = ORB::create();
+           // Ptr<ORB> detector = ORB::create();
+           Ptr<SIFT> detector = SIFT::create(  );
             std::vector<KeyPoint> keypoints_object, keypoints_scene;
             Mat descriptors_object, descriptors_scene;
             detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
-cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
-             drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
+// cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
+//              drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
 
 
     while (1) 
     {
+         drawing = Mat::zeros( s, CV_8UC3 );
         if (!Pause)
         {
             cap.read(frame);
@@ -570,14 +573,13 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                     printf("remap fail\r\n");
                 }
 			 }
-            // if (flatten && Flatten==false)
-            // { 
-            //     if (calibrated )
-            //         warpPerspective(warpped,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
-            //     else
-            //         warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
-
-            // } 
+            if (flatten && Flatten==false)
+            { 
+                if (calibrated )
+                    warpPerspective(warpped,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+                else
+                    warpPerspective(frame,warpped,trans,Size(frame.cols,frame.rows),INTER_LINEAR);
+            } 
 
 if (ContourCalibrate==true)
 {
@@ -588,7 +590,7 @@ if (ContourCalibrate==true)
     ShapeFrame = imread("tray v22.png",0);
             detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
 cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
-             drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
+           //  drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
 }
 
         // if the flatten button is on, 
@@ -603,43 +605,19 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                 flatten = true;
             }
         } 
-        //  if (opencv_config.Threshold_Slider>0 || count == 1)
-        // {
-        //     count=0;
-        //    // cvtColor(warpped_blur,gray,COLOR_BGRA2GRAY,0);
-        //      threshold(gray,gray,opencv_config.Threshold_Slider, 255, 0);
-        //     // adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,5*2+1,1);
-        //     // create a color filtered image for knob processing
-        //     // this will threshold the image using a HSV color filter
-           
-        //    // inRange(warpped_blur, colorFilter_min, colorFilter_max, gray);
-        //     // lets try canny edge detection
-        //     //cvtColor(warpped, gray , COLOR_BGRA2GRAY,0);
-        //     //  Canny(gray,gray,opencv_config.Threshold_Slider,opencv_config.Threshold_Slider*opencv_config.Threshold_size,7,false);
-        //     //  Mat element = getStructuringElement( MORPH_RECT ,Size( 2*opencv_config.dilation_size + 1, 2*opencv_config.dilation_size+1 ) );
-        //     //  morphologyEx(gray,gray, MORPH_CLOSE, element,Point(-1,-1),1);
-        // }
-        // else
-        // {
-        //     //cvtColor(warpped_blur, gray , COLOR_BGRA2GRAY,0);
-        //     // this does gaussian thresholding, it will take small patches of the screen and figure out magically the best value to use to threshold
-        //     // but its output is kind of noisy
-        //     if (opencv_config.Threshold_size==0)
-        //     opencv_config.Threshold_size=1;
-        //     adaptiveThreshold(gray,gray,255,ADAPTIVE_THRESH_GAUSSIAN_C,THRESH_BINARY,opencv_config.Threshold_size*2+1,1);
-        //     // so we have to anneal the output back into contours
-        //     Mat element = getStructuringElement( MORPH_RECT ,Size( 2*opencv_config.dilation_size + 1, 2*opencv_config.dilation_size+1 ),Point( opencv_config.dilation_size, opencv_config.dilation_size ) );
-        //     morphologyEx(gray,gray, MORPH_CLOSE, element);
-        // }
+
+// apply background mask
+bitwise_and(gray,background,gray);
+
             detector->detectAndCompute( gray, noArray(), keypoints_scene, descriptors_scene );
            // cvtColor(gray, gray , COLOR_GRAY2BGRA,0);
              drawKeypoints(gray,keypoints_scene,gray,Scalar(0,255,0));
 
-             Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
+            // Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
+    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
         
                 static double angle = -69.69;
     {
-        
 
                 // std::vector< DMatch > matches;
                 // matcher->match(descriptors_object, descriptors_scene, matches);
@@ -677,9 +655,9 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
 
                 Mat img_matches;
                 try {
-                drawMatches(input, keypoints_object, gray, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+                drawMatches(ShapeFrame, keypoints_object, gray, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
                
-                        resize(img_matches,drawing,s);
+                        resize(img_matches,input,s);
                 //-- Localize the object
                 std::vector<Point2f> obj;
                 std::vector<Point2f> scene;
@@ -694,7 +672,7 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
                 if (good_matches.size() > 4) {
 
                         //findEssentialMat(obj, , double focal=1.0, Point2d pp=Point2d(0, 0), int method=RANSAC, double prob=0.999, double threshold=1.0, OutputArray mask=noArray() )
-                        Mat H = findHomography(obj, scene, RANSAC,1.0,noArray(),5000,0.99999999999);
+                        Mat H = findHomography(obj, scene, RANSAC,3.0,noArray(),5000,0.99999999999);
                         if (H.rows*H.cols != 0)
                     angle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
                     if (angle<0)
@@ -709,37 +687,33 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
 
 
 
-                //     vector<Point2i> bbox;
+                    vector<Point2i> bbox;
                     
-                //     qrDecoder.detect(warpped,bbox);
-                //    //     drawing = Mat(warpped);
-                //     if (bbox.size()==4)
-                //     {
-                //         // cvtColor(drawing,drawing,COLOR_GRAY2BGRA);
-                //         polylines(drawing,bbox,true,Scalar(0,255,0),2);
-                //         line(drawing,bbox[0],bbox[1],Scalar(255,0,0),3);
-                //         line(drawing,bbox[0],Point2i(bbox[1].x,bbox[0].y),Scalar(0,0,255),5);
-                //         cv::Point a(1, 3);
-                //         cv::Point b(5, 6);
-                //         double res = cv::norm(a-b);//Euclidian distance
-                //         float angle=acos(norm(bbox[0]-Point2i(bbox[1].x,bbox[0].y))/norm(bbox[0]-bbox[1]))*180.0/M_PI;
-                        
+                    qrDecoder.detect(warpped,bbox);
+                   //     drawing = Mat(warpped);
+                    if (bbox.size()==4)
+                    {
+                        // cvtColor(drawing,drawing,COLOR_GRAY2BGRA);
+                        polylines(drawing,bbox,true,Scalar(0,255,0),2);
+                         if (foundQRcode==false)
+                        {
+                            std::string data = qrDecoder.decode(gray,bbox);
+                            if(data.length()>0)
+                            {
+                                cout << "Decoded Data : " << data << endl;
+                                foundQRcode = true;
+                            }
+                        }
+                //     }
+                    }    
                         char angleText[15];
                         //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
                         sprintf(angleText,"%0.02f",angle);
                         putText(drawing, angleText, Point(1*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
+                        putText(input, angleText, Point(1*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
                         
 
-                //         if (foundQRcode==false)
-                //         {
-                //             std::string data = qrDecoder.decode(gray,bbox);
-                //             if(data.length()>0)
-                //             {
-                //                 cout << "Decoded Data : " << data << endl;
-                //                 foundQRcode = true;
-                //             }
-                //         }
-                //     }
+                //        
         //         }
         //         TrayPresentCounter = TrayPresentResetVal;
         //     }

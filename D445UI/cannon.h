@@ -22,6 +22,19 @@
 extern pthread_mutex_t lvgl_mutex;
     extern lv_obj_t * kb;
  EXTERNC   void ta_event_cb(lv_event_t * e);
+ EXTERNC void radio_event_handler(lv_event_t * e);
+ 
+EXTERNC void slider_event_cb(lv_event_t * e);
+
+
+
+typedef struct
+{
+    char *Text;
+    char *ToggledText;
+    int32_t *Value;
+} button_cb_t;
+EXTERNC void button_event_cb(lv_event_t * e);
 
 EXTERNC void create_cannon_application(void);
 
