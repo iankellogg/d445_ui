@@ -100,35 +100,6 @@ void opencv_read_config()
 
 VideoCapture cap;
 
-Scalar colorFilter_min = Scalar(0,10,140), colorFilter_max = Scalar(180,255,255);
-
-void SetColorFilter(bool max, int h, int s, int v)
-{
-    if (max)
-    {
-        colorFilter_max = Scalar(h,s,v);
-    }
-    else
-    {
-        colorFilter_min = Scalar(h,s,v);
-    }
-}
-void GetColorFilter(bool max, int *h, int *s, int *v)
-{
-    if (max)
-    {
-        *h  = colorFilter_max.val[0];
-        *s  = colorFilter_max.val[1];
-        *v  = colorFilter_max.val[2];
-    }
-    else
-    {
-        *h  = colorFilter_min.val[0];
-        *s  = colorFilter_min.val[1];
-        *v  = colorFilter_min.val[2];
-    }
-}
-
 
 void init_camera()
 {
@@ -217,6 +188,7 @@ void CalibrateThread(void * args)
 
 }
 
+
 bool CalibrateLens(Mat& inputFrame, Mat& OutMap1, Mat &OutMap2)
 {
     Mat objp;
@@ -296,186 +268,7 @@ bool CalibrateLens(Mat& inputFrame, Mat& OutMap1, Mat &OutMap2)
     }
 }
 
-cv::Point3d findOrientation(const vector<Point>& src)
-{
-      cv::Moments m = cv::moments(src, true);
-      double cen_x=m.m10/m.m00;
-      double cen_y=m.m01/m.m00;
 
-	  double fix;
-      double u11_ = (m.m11/m.m00) - (cen_x*cen_y);
-      double u20_ = (m.m20/m.m00) - (cen_x*cen_x);
-      double u02_ = (m.m02/m.m00) - (cen_y*cen_y);
-
-
-     double m_11= 2.0*m.m11-m.m00*(cen_x*cen_x+cen_y*cen_y);// m.mu11/m.m00;    
-     double m_02=m.m02-m.m00*cen_y*cen_y;// m.mu02/m.m00;
-     double m_20=m.m20-m.m00*cen_x*cen_x;//m.mu20/m.m00;    
-     double theta = (m_20==m_02)?0:atan2(m_11, m_20-m_02)/2.0;
-    
-
-    //   double theta=0;
-    //   if ((u20_ - u02_)!=0)
-    //   {
-    // 	  double x = (u20_ - u02_);
-    // 	  double y = (2.0 * u11_);
-    // 	  theta =  atan2 (y,x)/2.0;
-           theta = (theta / M_PI) * 180.0 ;
-    	//   if ((x<0 && y>0) ||(x>0 && y<0))
-    	//   {
-    	// 	  fix = 90-theta;
-    	//   }
-    	//   else
-    	//   if ((x>0 && y>0) || (x<0 && y<0))
-    	//   {
-    	// 	  fix = 270- theta;
-    	//   }
-     // }
-
-      //printf("%f, %f, %f, %f \r\n",(2.0 * u11_),(u20_ - u02_),theta,fix);
-
-      //line(drawing,Point(cen_x,cen_y),Point(cen_x-(u20_ - u02_),cen_y-(2.0 * u11_)),Scalar(0,255,0),2);
-
-    return cv::Point3d(cen_x,cen_y,theta);
-}
-
-inline uint8_t Clamp(int n)
-{
-    n = n>255 ? 255 : n;
-    return n<0 ? 0 : n;
-}
-
-bool AddGaussianNoise(const Mat mSrc, Mat &mDst,double Mean=0.0, double StdDev=10.0)
-{
-    if(mSrc.empty())
-    {
-        cout<<"[Error]! Input Image Empty!";
-        return 0;
-    }
-
-    Mat mGaussian_noise = Mat(mSrc.size(),CV_16SC3);
-    randn(mGaussian_noise,Scalar::all(Mean),Scalar::all(StdDev));
-
-    for (int Rows = 0; Rows < mSrc.rows; Rows++)
-    {
-        for (int Cols = 0; Cols < mSrc.cols; Cols++)
-        {
-            Vec3b Source_Pixel= mSrc.at<Vec3b>(Rows,Cols);
-            Vec3b &Des_Pixel= mDst.at<Vec3b>(Rows,Cols);
-            Vec3s Noise_Pixel= mGaussian_noise.at<Vec3s>(Rows,Cols);
-
-            for (int i = 0; i < 3; i++)
-            {
-                int Dest_Pixel= Source_Pixel.val[i] + Noise_Pixel.val[i];
-                Des_Pixel.val[i]= Clamp(Dest_Pixel);
-            }
-        }
-    }
-
-    return true;
-}
-void overlayImage(const cv::Mat &background, const cv::Mat &foreground, 
-  cv::Mat &output, cv::Point2i location)
-{
-  background.copyTo(output);
-
-
-  // start at the row indicated by location, or at row 0 if location.y is negative.
-  for(int y = std::max(location.y , 0); y < background.rows; ++y)
-  {
-    int fY = y - location.y; // because of the translation
-
-    // we are done of we have processed all rows of the foreground image.
-    if(fY >= foreground.rows)
-      break;
-
-    // start at the column indicated by location, 
-
-    // or at column 0 if location.x is negative.
-    for(int x = std::max(location.x, 0); x < background.cols; ++x)
-    {
-      int fX = x - location.x; // because of the translation.
-
-      // we are done with this row if the column is outside of the foreground image.
-      if(fX >= foreground.cols)
-        break;
-
-      // determine the opacity of the foregrond pixel, using its fourth (alpha) channel.
-      double opacity =
-        ((double)foreground.data[fY * foreground.step + fX * foreground.channels() + 3])
-
-        / 255.;
-
-
-      // and now combine the background and foreground pixel, using the opacity, 
-
-      // but only if opacity > 0.
-      for(int c = 0; opacity > 0 && c < output.channels(); ++c)
-      {
-        unsigned char foregroundPx =
-          foreground.data[fY * foreground.step + fX * foreground.channels() + c];
-        unsigned char backgroundPx =
-          background.data[y * background.step + x * background.channels() + c];
-        output.data[y*output.step + output.channels()*x + c] =
-          backgroundPx * (1.-opacity) + foregroundPx * opacity;
-      }
-    }
-  }
-}
-void processKnobMatch(vector<Point> &Knob, Mat &OutputFrame)
-{
-    Point knob_center;
-    cv::Moments m = cv::moments(Knob, true);
-    double cen_x=m.m10/m.m00;
-    double cen_y=m.m01/m.m00;
-    knob_center = Point(cen_x,cen_y);
-
-    // this finds the point closest to the center of the contour
-    // because the shape of the knob has a point near the center, it must be pointing that way
-    // double minDistance=DBL_MAX;
-    // int minDistancePoint=0;
-    // for (int j=0; j<Knob.size();j++)
-    // {
-    //     Point p = Knob[j];
-    //     double res = norm(p-knob_center);
-    //     if (res<minDistance)
-    //     {
-    //         minDistance = res;
-    //         minDistancePoint = j;
-    //     }
-    // }
-
-    // double buffer = 180+(atan2(Knob[minDistancePoint].y-knob_center.y,Knob[minDistancePoint].x-knob_center.x)*180.0/M_PI);
-    double theta = findOrientation(Knob).z;
-//double drawTheta = theta+(((double)opencv_config.thetaOffset-18000.0)/100.0);
-    // static double theta;
-    // theta = .75*theta + 0.25*buffer;
-
-    //  avgAngle = theta;// 0.9*avgAngle + 0.1*theta;
-    // printf("%f\r\n",avgAngle);
-    char angleText[15];
-    //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
-    sprintf(angleText,"%0.02f",theta);
-    putText(OutputFrame, angleText, Point(8*OutputFrame.size().width/10,OutputFrame.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
-    fillPoly(OutputFrame,Knob,Scalar(0,0,255));
-   // line(OutputFrame,knob_center,Knob[minDistancePoint],Scalar(0,255,0));
-
-    vector<Point> Tri;
-    minEnclosingTriangle(Knob,Tri);
-    polylines(OutputFrame,Tri,true,Scalar(255,0,0));
-    // find the shortest line
-    line(OutputFrame,Point(OutputFrame.cols/2-10,OutputFrame.rows/2),Point(OutputFrame.cols/2+10,OutputFrame.rows/2),Scalar(0,255,0),5);
-    line(OutputFrame,Point(OutputFrame.cols/2,OutputFrame.rows/2-10),Point(OutputFrame.cols/2,OutputFrame.rows/2+10),Scalar(0,255,0),5);
-
-    
-    line(OutputFrame,Point(cen_x-10,cen_y),Point(cen_x+10,cen_y),Scalar(0,0,0),5);
-    line(OutputFrame,Point(cen_x,cen_y-10),Point(cen_x,cen_y+10),Scalar(0,0,0),5);
-
-    //draw_tray(OutputFrame, 20, 300, knob_center,drawTheta);
-
-    
-    
-}
 
 void *CamUpdate(void *arg)
 {
@@ -538,13 +331,16 @@ Mat background = imread("background.png",0);
 
 
 Mat ShapeFrame = imread("tray v22.png",0);
-           // Ptr<ORB> detector = ORB::create();
-           Ptr<SIFT> detector = SIFT::create(  );
+
+           Ptr<ORB> detector = ORB::create();
+          // Ptr<SIFT> detector = SIFT::create(  );
+          Ptr<BEBLID> descriptor = BEBLID::create( 0.75);
             std::vector<KeyPoint> keypoints_object, keypoints_scene;
             Mat descriptors_object, descriptors_scene;
-            detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
-// cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
-//              drawKeypoints(input,keypoints_object,input,Scalar(0,255,0));
+           // detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
+           detector->detect(ShapeFrame,keypoints_object);
+           descriptor->compute(ShapeFrame,keypoints_object,descriptors_object);
+           
 
 
     while (1) 
@@ -606,18 +402,21 @@ cvtColor(ShapeFrame,input,COLOR_BGRA2BGR,0);
             }
         } 
 
-// apply background mask
-bitwise_and(gray,background,gray);
+    // apply background mask
+    bitwise_and(gray,background,gray);
 
-            detector->detectAndCompute( gray, noArray(), keypoints_scene, descriptors_scene );
+            //detector->detectAndCompute( gray, noArray(), keypoints_scene, descriptors_scene );
+            
+           detector->detect(gray,keypoints_scene);
+           descriptor->compute(gray,keypoints_scene,descriptors_scene);
            // cvtColor(gray, gray , COLOR_GRAY2BGRA,0);
              drawKeypoints(gray,keypoints_scene,gray,Scalar(0,255,0));
 
-            // Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
-    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
+            Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
+    //Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
         
                 static double angle = -69.69;
-    {
+    
 
                 // std::vector< DMatch > matches;
                 // matcher->match(descriptors_object, descriptors_scene, matches);
@@ -683,7 +482,7 @@ bitwise_and(gray,background,gray);
                 {
 
                 }
-    }
+    
 
 
 
