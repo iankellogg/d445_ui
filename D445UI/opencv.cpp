@@ -46,7 +46,7 @@ bool Calibration = false;
 static const int CHECKERBOARD[2] = {4,4};
 
 Point2f cursorPos = Point2f(1000,1000);
-pthread_t CameraThread,angleThread;
+pthread_t CameraThread,angleThread[4];
     QRCodeDetector qrDecoder;
 
 // the handle we want to find
@@ -146,9 +146,11 @@ static Mat input;
 
 void *ProcessAngle(void *params)
 {
+
+    int thread = (int) params;
  Ptr<SIFT> detector = SIFT::create(  );
 //   Ptr<ORB> detector = ORB::create();
- // Ptr<BEBLID> descriptor = BEBLID::create( 0.75);
+//   Ptr<BEBLID> descriptor = BEBLID::create( 6.0);
  std::vector<KeyPoint> keypoints_object;
  Mat descriptors_object;
  
@@ -158,15 +160,13 @@ Mat background = imread("background.png",0);
 
     bitwise_and(ShapeFrame,background,ShapeFrame);
            detector->detectAndCompute( ShapeFrame, noArray(), keypoints_object, descriptors_object );
-        //    detector->detect(ShapeFrame,keypoints_object);
-         //   descriptor->compute(ShapeFrame,keypoints_object,descriptors_object);
+            // detector->detect(ShapeFrame,keypoints_object);
+            // descriptor->compute(ShapeFrame,keypoints_object,descriptors_object);
            
 
 
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
     //  Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
-    Mat  descriptors_scene;
-    vector<KeyPoint>  keypoints_scene;
     Mat buffer;
     Mat OutBuffer;
     while (1)
@@ -183,15 +183,28 @@ Mat background = imread("background.png",0);
         }
         input.copyTo(buffer);
     pthread_mutex_unlock(&angleMutex);
+    try {
     bitwise_and(buffer,background,buffer);
+    } catch (Exception e)
+    {
+        printf("what the fuck\r\n");
+        continue;
+    }
+    Mat  descriptors_scene;
+    vector<KeyPoint>  keypoints_scene;
 
+try {
         detector->detectAndCompute( buffer, noArray(), keypoints_scene, descriptors_scene );
-
-        //detector->detect(gray,keypoints_scene);
-        //descriptor->compute(gray,keypoints_scene,descriptors_scene);
+    
+        // detector->detect(buffer,keypoints_scene);
+        // descriptor->compute(buffer,keypoints_scene,descriptors_scene);
         // cvtColor(gray, gray , COLOR_GRAY2BGRA,0);
         // drawKeypoints(InputFrame,keypoints_scene,InputFrame,Scalar(0,255,0));
-
+} catch (Exception e)
+{
+    printf("piss\r\n");
+    continue;
+}
 
          std::vector< std::vector<DMatch> > knn_matches;
         try {
@@ -228,7 +241,27 @@ Mat background = imread("background.png",0);
             if (good_matches.size() > 4) {
 
                 //findEssentialMat(obj, , double focal=1.0, Point2d pp=Point2d(0, 0), int method=RANSAC, double prob=0.999, double threshold=1.0, OutputArray mask=noArray() )
-                Mat H = findHomography(obj, scene, RANSAC,3.0,noArray(),5000,0.99999999999);
+                Mat H;
+                try {
+                    
+// enum { LMEDS  = 4,  //!< least-median of squares algorithm
+//        RANSAC = 8,  //!< RANSAC algorithm
+//        RHO    = 16, //!< RHO algorithm
+//        USAC_DEFAULT  = 32, //!< USAC algorithm, default settings
+//        USAC_PARALLEL = 33, //!< USAC, parallel version
+//        USAC_FM_8PTS = 34,  //!< USAC, fundamental matrix 8 points
+//        USAC_FAST = 35,     //!< USAC, fast settings
+//        USAC_ACCURATE = 36, //!< USAC, accurate settings
+//        USAC_PROSAC = 37,   //!< USAC, sorted points, runs PROSAC
+//        USAC_MAGSAC = 38    //!< USAC, runs MAGSAC++
+//      };
+                    H = findHomography(obj, scene, RANSAC,3.0,noArray(),5000,0.99999999999);
+                }
+                catch (Exception e)
+                {
+                    printf("dicks\r\n");
+                    continue;
+                }
                 // somtimes homography fails even when we have matches
                 // dont try to process it if it failed
                 if (H.rows*H.cols != 0)
@@ -273,7 +306,9 @@ Mat background = imread("background.png",0);
             sprintf(angleText,"%0.02f",retAngle);
                 //putText(drawing, angleText, Point(1*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
                 putText(OutBuffer, angleText, Point(1*OutBuffer.size().width/10,OutBuffer.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
-                
+                char threadNum[4];
+                sprintf(threadNum,"%d",thread);
+                putText(OutBuffer, threadNum, Point(9*OutBuffer.size().width/10,OutBuffer.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
     pthread_mutex_lock(&angleMutex);
                 OutBuffer.copyTo(processFrame);
                 
@@ -480,8 +515,10 @@ cv::fisheye::initUndistortRectifyMap(K, D, cv::Mat::eye(3, 3, CV_32F), K, s, CV_
            input = Mat::zeros( s, CV_8UC3 );
            warpped_blur = Mat::zeros(s,CV_8UC3);
 
-
-    pthread_create(&angleThread, NULL, &ProcessAngle, NULL);
+for (int i=0;i<1;i++)
+{
+    pthread_create(&angleThread[i], NULL, &ProcessAngle, (void*)i);
+}
 	//   cv::FileStorage file(SHAPEFILENAME, cv::FileStorage::READ);
 	//   if (file.isOpened()==true)
 	//   {
