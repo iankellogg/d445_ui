@@ -165,15 +165,10 @@ Mat background = imread("background.png",0);
 
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::FLANNBASED);
     //  Ptr<BFMatcher> matcher=    BFMatcher::create(cv::NORM_HAMMING,false);
-    std::vector<Point2f> obj;
-    std::vector<Point2f> scene;
     Mat  descriptors_scene;
     vector<KeyPoint>  keypoints_scene;
-    std::vector< std::vector<DMatch> > knn_matches;
-    std::vector<DMatch> good_matches;
     Mat buffer;
     Mat OutBuffer;
-    float retAngle=0;
     while (1)
     {
         // if there is no data to process, sleep for 100ms
@@ -182,6 +177,7 @@ Mat background = imread("background.png",0);
         if (input.empty())
         {
              pthread_mutex_unlock(&angleMutex);
+             printf("Input Empty\r\n");
             usleep(100*1000);
             continue;
         }
@@ -197,6 +193,7 @@ Mat background = imread("background.png",0);
         // drawKeypoints(InputFrame,keypoints_scene,InputFrame,Scalar(0,255,0));
 
 
+         std::vector< std::vector<DMatch> > knn_matches;
         try {
         matcher->knnMatch( descriptors_object, descriptors_scene, knn_matches, 2 );
         } catch (Exception e)
@@ -206,6 +203,7 @@ Mat background = imread("background.png",0);
         }
         //-- Filter matches using the Lowe's ratio test
         float ratio_thresh = opencv_config.matchValue/100.0;
+            std::vector<DMatch> good_matches;
         for (size_t i = 0; i < knn_matches.size(); i++)
         {
             if (knn_matches[i][0].distance < ratio_thresh * knn_matches[i][1].distance)
@@ -215,10 +213,10 @@ Mat background = imread("background.png",0);
         }
 
         Mat img_matches;
-        try {
-            drawMatches(ShapeFrame, keypoints_object, buffer, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-            resize(img_matches,OutBuffer,buffer.size());
             //-- Localize the object
+    float retAngle=0;
+    std::vector<Point2f> obj;
+    std::vector<Point2f> scene;
 
             for (int i = 0; i < good_matches.size(); i++)
             {
@@ -234,13 +232,17 @@ Mat background = imread("background.png",0);
                 // somtimes homography fails even when we have matches
                 // dont try to process it if it failed
                 if (H.rows*H.cols != 0)
+                {
                     retAngle =  atan2(H.at<double>(1,0),H.at<double>(0,0))*180.0/M_PI;
+                } else {
+                    printf("homography failed\r\n");
+                }
                     // map the angle from -180 -> 180 to a 0-360
                 if (retAngle<0) retAngle += 360.0;
                 // reverse the direction of angle to match the tray
                 retAngle = 360.0 - retAngle;
                 cameraStatus.trayAngle = retAngle;
-                //sprintf(angleText,"%f = %f - %f",avgAngle,mp.z,mu.z);
+                
                if (cameraStatus.statusBits.trayPresent==true)
                 {
                     float anglePerPos = 360.0/cameraStatus.trayNumPos;
@@ -254,7 +256,19 @@ Mat background = imread("background.png",0);
                 {
                     cameraStatus.trayPosition=0;
                 }
-            } 
+            } else
+            {
+                printf("Bad Matches\r\n");
+            }
+        try {
+            drawMatches(ShapeFrame, keypoints_object, buffer, keypoints_scene, good_matches, img_matches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+            resize(img_matches,OutBuffer,buffer.size());
+        }
+        catch (Exception e)
+        {
+
+            printf("shit\r\n");
+        }
                 char angleText[15];
             sprintf(angleText,"%0.02f",retAngle);
                 //putText(drawing, angleText, Point(1*drawing.size().width/10,drawing.size().height-10), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 1, LINE_AA);
@@ -264,10 +278,6 @@ Mat background = imread("background.png",0);
                 OutBuffer.copyTo(processFrame);
                 
     pthread_mutex_unlock(&angleMutex);
-        }
-        catch (Exception e)
-        {
-        }
     }
     
 }
