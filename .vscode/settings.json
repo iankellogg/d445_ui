@@ -60,6 +60,7 @@
         "typeinfo": "cpp",
         "opencv.h": "c",
         "settings.h": "c",
-        "camera.h": "c"
+        "camera.h": "c",
+        "stdio.h": "c"
     }
 }

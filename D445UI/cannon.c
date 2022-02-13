@@ -1,7 +1,10 @@
 
+
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
+#include <stdio.h> 
+#include <pthread.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <cannon.h>
 #include <Settings/settings.h>
 /* Littlevgl specific */
@@ -16,30 +19,20 @@
 // PIGPIOD
 #include <pigpiod_if2.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>  
+#include <string.h>
+#include <errno.h> 
 #include "opencv.h"
 
-typedef struct 
-{
-    // the current angle of the tray
-    float trayAngle;
-    // the numeric position (1-20)
-    int trayPosition;
-    // how confident we are about the trays position
-    // if this number is "low" issue a warning that maybe the tray or camera is dirty
-    float trayConfidence;
-    // if the tray is detected
-    struct statusBits
-    {
-        bool trayPresent:1;
-        bool TooDark:1; // camera can somehow tell that its too dark to see anything
-        bool trayCantMove:1;   // tray tried to move but didn't
-        bool trayWrongPosition:1;   // tray moved but can't get to the requested position
-    };
 
 
-} camera_status_t;
+static const char klipperPath[] = "/tmp/printer";
+int hFD; 
 
 
+void drawHandle_cb(lv_timer_t * timer);
 
 
     lv_obj_t * kb;
@@ -230,9 +223,35 @@ static lv_style_t style_title;
     lv_obj_clear_flag(lv_tabview_get_content(tabview), LV_OBJ_FLAG_SCROLLABLE);
 
 
+lv_obj_t * canvas = lv_obj_create(tab1);
+    lv_obj_set_size(canvas,SDL_HOR_RES,SDL_HOR_RES);
+    //lv_canvas_set_buffer(canvas, cbuf, SDL_HOR_RES,SDL_HOR_RES, LV_IMG_CF_TRUE_COLOR);
+    lv_obj_center(canvas);
+    //lv_canvas_fill_bg(canvas, lv_palette_lighten(LV_PALETTE_BLUE, 3), LV_OPA_TRANSP);
+    lv_png_init();
+    
+    lv_style_init(&style);
+    lv_style_set_radius(&style, 50);
+    lv_style_set_bg_color(&style,lv_palette_main(LV_PALETTE_BLUE));
+    lv_style_init(&style_sel);
+    lv_style_set_radius(&style_sel, 50);
+    lv_style_set_bg_color(&style_sel,lv_palette_main(LV_PALETTE_GREEN));
+    for (int i=0;i<20;i++)
+    {
+        Create_Circle(canvas, i, SDL_HOR_RES/2-100-20);
+    }
 
-    label = lv_label_create(tab1);
+
+    handleImg = lv_img_create(tab1);
+    lv_img_set_src(handleImg, "c:/../handle.png");
+    lv_obj_align(handleImg, LV_ALIGN_CENTER, 0, 0);
+    lv_point_t pivot;
+    lv_img_get_pivot(handleImg, &pivot);
+    //pivot.y *=1.2;
+    lv_img_set_pivot(handleImg, pivot.x, pivot.y);    /*Rotate around the top left corner*/
     lv_obj_clear_flag(tab1, LV_OBJ_FLAG_SCROLLABLE);
+    
+	timer = lv_timer_create(drawHandle_cb, 100,  handleImg);
 
 
 //static lv_color_t cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(SDL_HOR_RES, SDL_HOR_RES)];
@@ -257,7 +276,81 @@ static lv_style_t style_title;
 
     //lv_obj_scroll_to_view_recursive(label, LV_ANIM_ON);
 
+    
+    hFD = open(klipperPath, O_RDWR ); 
 
+
+}
+
+
+void gotoPos(int pos)
+{
+    static int cp = -1;
+    if (cp==-1)
+        cp = (cameraStatus.trayPosition-1)*(7200.0/20.0)+7200.0;
+    int p;
+     int p1= (pos)*(7200.0/20.0)+round(cp/7200.0)*7200;
+     int p2 = (pos-20)*(7200.0/20.0)+round(cp/7200.0)*7200;
+    printf ("%d -> %d, %d -> %d or %d\r\n",cameraStatus.trayPosition,pos+1,cp,p1,p2);
+    if (abs(p1-cp) > abs(p2-cp))
+    {
+        p = p2;
+    }
+    else
+    {
+        p = p1;
+    }
+    cp = p;
+    char buffer[80];
+     int c = snprintf(buffer,80,"MANUAL_STEPPER STEPPER=tray ENABLE=1 MOVE=%d\n",p);
+          write(hFD,buffer,c);
+}
+
+void drawHandle_cb(lv_timer_t * timer)
+{
+    lv_obj_t *img = (lv_obj_t*)timer->user_data;
+
+    float angle = cameraStatus.trayAngle;
+    lv_img_set_angle(img, angle*10);
+    
+}
+
+void sample_event_handler(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_obj_t *ta = lv_event_get_target(e);
+    int num = lv_event_get_user_data(e);
+    if (code == LV_EVENT_CLICKED)
+    {
+        int angle = num*360/20;
+        LV_LOG_USER("Button %d %d",num,angle);
+        gotoPos(num);
+        //lv_slider_set_value(slider,angle,LV_ANIM_ON);
+        //lv_event_send(slider,LV_EVENT_VALUE_CHANGED,handleImg);
+        //
+        //c_run_Client();
+    }
+}
+
+void Create_Circle(lv_obj_t *Parent, int sample, int radius)
+{
+    float offset = -90;
+    int angle = 360*sample/20;
+    int x = radius * cos((angle+offset)*M_PI/180.0) + (SDL_HOR_RES-100)/2;
+    int y = radius * sin((angle+offset)*M_PI/180.0) + (SDL_HOR_RES-100)/2;
+
+    lv_obj_t *btn = lv_btn_create(Parent);
+    //lv_obj_remove_style_all(btn);       
+    lv_obj_add_style(btn, &style, 0);    
+    lv_obj_t *label = lv_label_create(btn);
+    lv_label_set_text_fmt(label,"%d",sample+1);
+    lv_obj_center(label);
+    lv_obj_add_style(btn, &style_sel, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn, sample_event_handler, LV_EVENT_ALL, angle*20/360);
+    //lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_size(btn,100,100);
+    lv_obj_set_pos(btn,x,y);
+    return btn;
 }
 
 void ta_event_cb(lv_event_t * e)

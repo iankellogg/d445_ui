@@ -98,7 +98,7 @@
  *With complex image decoders (e.g. PNG or JPG) caching can save the continuous open/decode of images.
  *However the opened images might consume additional RAM.
  *0: to disable caching*/
-#define LV_IMG_CACHE_DEF_SIZE     0
+#define LV_IMG_CACHE_DEF_SIZE     4
 /*Maximum buffer size to allocate for rotation. Only used if software rotation is enabled in the display driver.*/
 #define LV_DISP_ROT_MAX_BUF         (10*1024)
 /*-------------
@@ -361,7 +361,7 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 
 
 /*File system interface*/
-#define LV_USE_FS_IF	0
+#define LV_USE_FS_IF	1
 #if LV_USE_FS_IF
 #  define LV_FS_IF_FATFS    '\0'
 #  define LV_FS_IF_PC       'c'
@@ -514,11 +514,11 @@ e.g. "stm32f769xx.h" or "stm32f429xx.h"*/
 /*======================
 * PNG
 *=========================*/
-#define LV_PNG_USE_LV_FILESYSTEM 0
-#define LV_USE_PNG 0
+#define LV_PNG_USE_LV_FILESYSTEM 1
+#define LV_USE_PNG 1
 /*--END OF LV_CONF_H--*/
 
-#define LV_USE_FFMPEG 1
+#define LV_USE_FFMPEG 0
 
 #endif /*LV_CONF_H*/
 
