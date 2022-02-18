@@ -136,6 +136,7 @@ void init_camera()
     }
     cap.set(CAP_PROP_FRAME_WIDTH,800);
     cap.set(CAP_PROP_FRAME_HEIGHT,600);
+    cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
 }
 
 

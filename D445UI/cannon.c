@@ -285,8 +285,8 @@ lv_obj_t * canvas = lv_obj_create(tab1);
 
 void gotoPos(int pos)
 {
-    static int cp = -1;
-    if (cp==-1)
+     int cp = -1;
+    //if (cp==-1)
         cp = (cameraStatus.trayPosition-1)*(7200.0/20.0)+7200.0;
     int p;
      int p1= (pos)*(7200.0/20.0)+round(cp/7200.0)*7200;
@@ -300,7 +300,7 @@ void gotoPos(int pos)
     {
         p = p1;
     }
-    cp = p;
+   // cp = p;
     char buffer[80];
      int c = snprintf(buffer,80,"MANUAL_STEPPER STEPPER=tray ENABLE=1 MOVE=%d\n",p);
           write(hFD,buffer,c);
